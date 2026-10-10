@@ -10,13 +10,13 @@
 # line in the description, which becomes the squash commit's body -- goes
 # under Breaking whatever its type.
 #
-# pull_request_target so that a pull request from a fork is labelled too.
-# Only the title and description are read, with no checkout and nothing from
-# the pull request run here, which is what makes that trigger safe.
+# pull_request, not pull_request_target, which GitHub blocks on public
+# repositories by default. A fork's pull request gets a read-only token that
+# cannot label, so the job skips it and a maintainer sets the label by hand.
 name: label by title
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, edited]
 
 permissions: {}
@@ -26,7 +26,9 @@ jobs:
     name: label from the title
     # `edited` also fires for a base-branch change, which leaves the labels
     # alone.
-    if: github.event.action != 'edited' || github.event.changes.title || github.event.changes.body
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
     # One run per pull request at a time: two overlapping runs would each read
     # the labels, then each edit, and could leave two managed labels behind.
     # Set on the job, after the condition above, so that a run the condition
