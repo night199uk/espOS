@@ -11,8 +11,9 @@
 # under Breaking whatever its type.
 #
 # pull_request, not pull_request_target, which GitHub blocks on public
-# repositories by default. A fork's pull request gets a read-only token that
-# cannot label, so the job skips it and a maintainer sets the label by hand.
+# repositories by default from 2026-11-02. A fork's pull request gets a
+# read-only token that cannot label, so the job skips it and a maintainer sets
+# the label by hand.
 name: label by title
 
 on:
