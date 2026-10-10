@@ -316,7 +316,7 @@ Lockstep is maintained by the release PR, not by hand. release-please bumps
 
   ```yaml
   # x-release-please-start-version
-  version: "0.16.0"
+  version: "0.16.1"
   # x-release-please-end
   ```
 
@@ -427,7 +427,7 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     permissions:
       contents: write
-    uses: signalk-espOS/espOS/.github/workflows/release-firmware.yml@v0.16.0 # x-release-please-version
+    uses: signalk-espOS/espOS/.github/workflows/release-firmware.yml@v0.16.1 # x-release-please-version
     with:
       name: my-firmware
       builds: '[{"target": "esp32c6"}, {"target": "esp32"}]'

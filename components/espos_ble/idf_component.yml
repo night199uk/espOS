@@ -3,7 +3,7 @@
 ## espos_ble component manifest: registry metadata for signalk-espos/espos_ble.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.16.0"
+version: "0.16.1"
 # x-release-please-end
 description: "BLE gateway: bridges Bluetooth Low Energy devices to signalk-server's BLE provider API"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_ble"
@@ -47,17 +47,17 @@ dependencies:
   # from the registry has no such directory and the field is ignored there.
   signalk-espos/espos_config:
     # x-release-please-start-version
-    version: "^0.16.0"
+    version: "^0.16.1"
     # x-release-please-end
     override_path: "../espos_config"
   signalk-espos/espos_httpd:
     # x-release-please-start-version
-    version: "^0.16.0"
+    version: "^0.16.1"
     # x-release-please-end
     override_path: "../espos_httpd"
   signalk-espos/espos_sk:
     # x-release-please-start-version
-    version: "^0.16.0"
+    version: "^0.16.1"
     # x-release-please-end
     override_path: "../espos_sk"
   # ble_proto.c includes cJSON.h and builds on every target, linux included.
@@ -91,6 +91,6 @@ dependencies:
       - if: "target == esp32p4"
   signalk-espos/espos_event:
     # x-release-please-start-version
-    version: "^0.16.0"
+    version: "^0.16.1"
     # x-release-please-end
     override_path: "../espos_event"

@@ -15,6 +15,19 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.16.1 (2026-10-10)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Fixed
+* fix(sk): anchor the token and pending request to an address by @dirkwa in https://github.com/signalk-espOS/espOS/pull/193
+### Changed
+* refactor(ui): convert the mock, gzip step and ESLint config to TypeScript by @dirkwa in https://github.com/signalk-espOS/espOS/pull/189
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.16.0...v0.16.1
+
 ## 0.16.0 (2026-10-05)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
