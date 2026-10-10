@@ -33,7 +33,7 @@ Which server is used:
 |--------------------------------------|----------------------------------------------------|
 | `server_host` set                    | that host:port (manual, for networks without mDNS) |
 | `server_self` set                    | the discovered server with that self URN           |
-| neither                              | sticky: the server our token / pending request belongs to; else the discovered `master` with the lowest self URN; else any |
+| neither                              | sticky: the server our token / pending request belongs to (its address first, then its self URN); else the discovered `master` with the lowest self URN; else any |
 
 Discovered servers that turn out unreachable (wrong subnet, gone) are
 skipped for five minutes so one dead entry cannot block the machine.
@@ -80,6 +80,26 @@ Design points from the plan, all implemented:
   reinstalled server (new self) gets a fresh request; a token learned for a
   manual host without mDNS has its self filled in from the first successful
   verify.
+* **...and by the address it was issued at.** A self URN is not unique: a
+  second server configured with the boat's MMSI (a test VM, a spare Pi)
+  advertises the same one. Selection and the discovery list therefore anchor
+  on the token's (or pending request's) host:port first -- as long as that
+  address still answers with the same self, since DHCP can hand it to another
+  server. A server with the same self at another address is a twin and is not
+  elected until the anchored address has dropped out of the discovery list
+  (two discovery intervals plus 5 s without an answer) and gone unheard for
+  two discovery rounds in which anything answered; rounds with no answers at
+  all (network down) do not count. After that it is taken to be our server at
+  a new address. Without this, mDNS answer order picked between the twins
+  every round: a pending request polled on the other one came back 404 and
+  was dropped, so the approval was never collected and the device kept
+  asking. Among servers with the same self the one in use stays, then the
+  first by address (string order) wins.
+* **A recorded token address is not re-homed by a verify**: a twin with
+  security off answers 200 to any token, and following it would anchor the
+  device there for good. A token stored by older firmware, which has no
+  address, learns it from its first successful plaintext verify; over TLS
+  (no verify leg) it keeps the self-only behaviour.
 * **A pending `href` is persisted** with the server it belongs to; a reboot
   mid-approval resumes polling instead of creating a duplicate request.
 * **Manual token paste**: `POST /api/v1/sk/token {"token": "…"}` → verified

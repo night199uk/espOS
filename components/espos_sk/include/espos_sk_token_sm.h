@@ -90,6 +90,12 @@ typedef struct {
 typedef struct {
     char token[ESPOS_SK_TOKEN_MAX];
     char token_self[ESPOS_SK_SELF_MAX];   /* the server the token belongs to */
+    /* ...and the address it was issued at. self alone does not identify a
+     * server: a second install configured with the same MMSI (a test VM, a
+     * spare Pi) advertises the same URN, and a token tried there is refused
+     * and dropped. "" for a token stored before this field existed. */
+    char token_host[ESPOS_SK_HOST_MAX];
+    uint16_t token_port;
     char pending_href[ESPOS_SK_HREF_MAX];
     char pending_host[ESPOS_SK_HOST_MAX];
     uint16_t pending_port;

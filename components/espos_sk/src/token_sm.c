@@ -95,6 +95,19 @@ static void clear_token(espos_sk_tok_sm_t *sm)
 {
     sm->store.token[0] = '\0';
     sm->store.token_self[0] = '\0';
+    sm->store.token_host[0] = '\0';
+    sm->store.token_port = 0;
+}
+
+/* Record where the token works. Returns true when that changed. */
+static bool set_token_addr(espos_sk_tok_sm_t *sm, const char *host, uint16_t port)
+{
+    if (strcmp(sm->store.token_host, host) == 0 && sm->store.token_port == port) {
+        return false;
+    }
+    snprintf(sm->store.token_host, sizeof(sm->store.token_host), "%s", host);
+    sm->store.token_port = port;
+    return true;
 }
 
 /* ---------------------------------------------------------- actions */
@@ -532,6 +545,7 @@ void espos_sk_tok_event(espos_sk_tok_sm_t *sm, espos_sk_tok_event_t ev, const vo
                 if (strcmp(r->permission, "APPROVED") == 0 && r->token[0]) {
                     snprintf(sm->store.token, sizeof(sm->store.token), "%s", r->token);
                     snprintf(sm->store.token_self, sizeof(sm->store.token_self), "%s", sm->st.server.self);
+                    set_token_addr(sm, sm->st.server.host, sm->st.server.port);
                     clear_pending(sm);
                     save(sm);
                     sm->st.approve_count++;
@@ -604,15 +618,22 @@ void espos_sk_tok_event(espos_sk_tok_sm_t *sm, espos_sk_tok_event_t ev, const vo
                 notify(sm);
                 return;
             }
+            /* A token stored before the address was recorded learns it here.
+             * One that has an address keeps it: a 200 is not proof this is
+             * the issuing server -- a same-self twin with security off
+             * answers 200 to anything -- and re-homing on it would anchor the
+             * device to the twin for good. A server that moved is found by
+             * self once its old address has gone quiet (espos_sk.c). */
+            bool changed = !sm->store.token_host[0] && set_token_addr(sm, sm->st.server.host, sm->st.server.port);
             if (r->self[0]) {
-                bool changed = strcmp(sm->store.token_self, r->self) != 0;
+                changed |= strcmp(sm->store.token_self, r->self) != 0;
                 snprintf(sm->store.token_self, sizeof(sm->store.token_self), "%s", r->self);
                 if (sm->st.server.self[0] == '\0') {
                     snprintf(sm->st.server.self, sizeof(sm->st.server.self), "%s", r->self);
                 }
-                if (changed) {
-                    save(sm);
-                }
+            }
+            if (changed) {
+                save(sm);
             }
             if (sm->st.state != ESPOS_SK_TOK_APPROVED) {
                 sm->st.approved_since_ms = now(sm);
@@ -696,6 +717,7 @@ void espos_sk_tok_event(espos_sk_tok_sm_t *sm, espos_sk_tok_event_t ev, const vo
         snprintf(sm->store.token, sizeof(sm->store.token), "%s", tok);
         snprintf(sm->store.token_self, sizeof(sm->store.token_self), "%s",
                  sm->st.has_server ? sm->st.server.self : "");
+        set_token_addr(sm, sm->st.has_server ? sm->st.server.host : "", sm->st.has_server ? sm->st.server.port : 0);
         clear_pending(sm);
         save(sm);
         sm->error_backoff_ms = ERR_MIN_MS;

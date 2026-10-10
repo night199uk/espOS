@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Dirk Wahrheit
 # SPDX-License-Identifier: Apache-2.0
 idf_build_get_property(target IDF_TARGET)
-set(srcs src/token_sm.c src/sk_store.c src/sk_http.c src/sk_http_api.c src/sk_delta.c src/sk_parse.c src/sk_inbound.c src/sk_ws.c src/espos_sk.c src/api_sk.c src/sk_tls_policy.c src/sk_tls.c src/sk_migrate.c src/sk_time.c src/sk_ota_url.c)
+set(srcs src/token_sm.c src/sk_store.c src/sk_http.c src/sk_http_api.c src/sk_delta.c src/sk_parse.c src/sk_inbound.c src/sk_ws.c src/espos_sk.c src/api_sk.c src/sk_tls_policy.c src/sk_tls.c src/sk_migrate.c src/sk_time.c src/sk_ota_url.c src/sk_select.c)
 # esp-tls/mbedtls are named unconditionally even though only an
 # ESPOS_SK_TLS build compiles anything that uses them. A `if(CONFIG_...)`
 # here would be empty on the first pass -- component CMakeLists are

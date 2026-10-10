@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Device state that must not travel with an exported configuration: the
- * persistent clientId, the access token (keyed by the server's self URN)
+ * persistent clientId, the access token (keyed by the server's self URN and
+ * the address it was issued at)
  * and a pending request. Plain NVS in the same (optionally encrypted)
  * partition as the config store.
  */
@@ -51,6 +52,19 @@ static void make_uuid(char out[40])
              b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
 }
 
+/* FNV-1a over the token. tok_host/tok_port are only believed when this
+ * matches: firmware from before they existed rewrites the token without
+ * touching them (an OTA rollback that then pairs with another server), and the
+ * new token must not inherit the old one's address. */
+static uint32_t token_sum(const char *tok)
+{
+    uint32_t h = 2166136261u;
+    for (; *tok; tok++) {
+        h = (h ^ (uint8_t)*tok) * 16777619u;
+    }
+    return h;
+}
+
 esp_err_t espos_sk_store_load(espos_sk_tok_store_t *out, char client_id[40])
 {
     memset(out, 0, sizeof(*out));
@@ -75,12 +89,22 @@ esp_err_t espos_sk_store_load(espos_sk_tok_store_t *out, char client_id[40])
     }
     get_str(h, "token", out->token, sizeof(out->token));
     get_str(h, "tok_self", out->token_self, sizeof(out->token_self));
+    get_str(h, "tok_host", out->token_host, sizeof(out->token_host));
     get_str(h, "pend_href", out->pending_href, sizeof(out->pending_href));
     get_str(h, "pend_host", out->pending_host, sizeof(out->pending_host));
     get_str(h, "pend_self", out->pending_self, sizeof(out->pending_self));
     uint16_t port = 0;
     if (nvs_get_u16(h, "pend_port", &port) == ESP_OK) {
         out->pending_port = port;
+    }
+    port = 0;
+    if (nvs_get_u16(h, "tok_port", &port) == ESP_OK) {
+        out->token_port = port;
+    }
+    uint32_t sum = 0;
+    if (!out->token[0] || nvs_get_u32(h, "tok_sum", &sum) != ESP_OK || sum != token_sum(out->token)) {
+        out->token_host[0] = '\0';
+        out->token_port = 0;
     }
     nvs_close(h);
     return ESP_OK;
@@ -105,6 +129,9 @@ esp_err_t espos_sk_store_save(const espos_sk_tok_store_t *st)
     esp_err_t e;
     if ((e = set_or_erase(h, "token", st->token)) != ESP_OK) err = e;
     if ((e = set_or_erase(h, "tok_self", st->token_self)) != ESP_OK) err = e;
+    if ((e = set_or_erase(h, "tok_host", st->token_host)) != ESP_OK) err = e;
+    if ((e = nvs_set_u16(h, "tok_port", st->token_port)) != ESP_OK) err = e;
+    if ((e = nvs_set_u32(h, "tok_sum", token_sum(st->token))) != ESP_OK) err = e;
     if ((e = set_or_erase(h, "pend_href", st->pending_href)) != ESP_OK) err = e;
     if ((e = set_or_erase(h, "pend_host", st->pending_host)) != ESP_OK) err = e;
     if ((e = set_or_erase(h, "pend_self", st->pending_self)) != ESP_OK) err = e;

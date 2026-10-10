@@ -101,6 +101,11 @@ static struct {
     char client_id[40];
     espos_sk_discovered_t servers[ESPOS_SK_MAX_SERVERS];
     uint32_t avoid_until_ms[ESPOS_SK_MAX_SERVERS]; /* unreachable discovered servers are skipped for a while */
+    /* Discovery rounds, among those anyone answered, in which the anchored
+     * address (anchor_self_fallback) was not heard; keyed by that address. */
+    char anchor_unheard_host[ESPOS_SK_HOST_MAX];
+    uint16_t anchor_unheard_port;
+    uint32_t anchor_unheard_rounds;
     size_t server_count;
     uint32_t last_discovery_ms;
     bool net_was_up;
@@ -391,9 +396,71 @@ static bool resolve_scheme(espos_sk_server_t *srv, int advertised)
 #endif
 }
 
+/* How long a discovered entry outlives its last mDNS answer. */
+static uint32_t carry_window_ms(void)
+{
+    return 2 * s.discover_interval_ms + 5000;
+}
+
+/* A server with the anchor's self URN but another address is a twin
+ * (sk_select.c) until the anchored address has gone unheard for this many
+ * answered rounds; after that it is taken to be our server at a new address.
+ * Two, so that neither one lossy round nor the first round after boot hands
+ * the pairing over. */
+#define ANCHOR_UNHEARD_ROUNDS 2
+
+static bool is_anchor_key(const espos_sk_anchor_t *a)
+{
+    return strcmp(s.anchor_unheard_host, a->host) == 0 && s.anchor_unheard_port == a->port;
+}
+
+/* Count this round against the anchored address if it was not among the
+ * answers. A round nobody answered (the network is down or coming back) says
+ * nothing either way and leaves the count alone: counting it would let an
+ * outage hand the pairing to whichever twin answers first afterwards, and
+ * resetting on it would let a flaky link postpone a real move for ever. Lock
+ * held; run_discovery() only. */
+static void anchor_note_answers(const espos_sk_anchor_t *a, const espos_sk_discovered_t *found, size_t n)
+{
+    if (!a->host[0] || n == 0) {
+        return;
+    }
+    if (!is_anchor_key(a)) {
+        snprintf(s.anchor_unheard_host, sizeof(s.anchor_unheard_host), "%s", a->host);
+        s.anchor_unheard_port = a->port;
+        s.anchor_unheard_rounds = 0;
+    }
+    for (size_t k = 0; k < n; k++) {
+        if (espos_sk_is_anchor(&found[k], a)) {
+            s.anchor_unheard_rounds = 0;
+            return;
+        }
+    }
+    s.anchor_unheard_rounds++;
+}
+
+/* May the anchor fall back to its self URN? Yes when it has no address (older
+ * firmware stored none), or when that address has aged out of the list and
+ * gone unheard for ANCHOR_UNHEARD_ROUNDS answered rounds. While it is still in
+ * the list (carried over a lossy round) it is matched by address anyway. Lock
+ * held. */
+static bool anchor_self_fallback(const espos_sk_anchor_t *a)
+{
+    if (!a->host[0]) {
+        return true;
+    }
+    for (size_t i = 0; i < s.server_count; i++) {
+        if (espos_sk_is_anchor(&s.servers[i], a)) {
+            return false;
+        }
+    }
+    return is_anchor_key(a) && s.anchor_unheard_rounds >= ANCHOR_UNHEARD_ROUNDS;
+}
+
 /* Pick the server per config: manual host wins; else the discovered server
- * with the preferred self; else the first discovered "master"; else the
- * first discovered. Task-private. */
+ * with the preferred self; else the server our token or pending request
+ * belongs to; else the "master", then any server, in election order
+ * (espos_sk_disc_before). Task-private. */
 static void select_server(void)
 {
     espos_sk_server_t chosen = { 0 };
@@ -423,33 +490,41 @@ static void select_server(void)
         lock();
         int idx = -1;
         uint32_t t = now_ms();
+        const char *cur_host = s.have_server ? s.server.host : "";
+        uint16_t cur_port = s.have_server ? s.server.port : 0;
+        espos_sk_anchor_t anchor;
+        espos_sk_store_anchor(&s.sm.store, &anchor);
+        bool fallback = anchor_self_fallback(&anchor);
         if (s.cfg_self[0]) {
-            for (size_t i = 0; i < s.server_count; i++) {
-                if (strcmp(s.servers[i].self, s.cfg_self) == 0) {
-                    idx = (int)i;
-                    break;
-                }
+            /* The configured self, at the address our token is for when it
+             * is that server's -- the same twin problem as below. */
+            if (strcmp(anchor.self, s.cfg_self) != 0) {
+                anchor.host = "";
+                anchor.port = 0;
             }
+            anchor.self = s.cfg_self;
+            idx = espos_sk_find_anchored(s.servers, s.server_count, &anchor, cur_host, cur_port, fallback);
         } else {
             /* Sticky and deterministic: (1) the server our token / pending
-             * request belongs to, (2) reachable "master" servers by self URN,
-             * (3) any reachable server by self URN. mDNS answer order is not
-             * stable, so never "first in the list". */
-            const char *anchor = s.sm.store.token[0] ? s.sm.store.token_self : (s.sm.store.pending_href[0] ? s.sm.store.pending_self : "");
-            for (size_t i = 0; i < s.server_count && anchor[0]; i++) {
-                if (strcmp(s.servers[i].self, anchor) == 0) {
-                    idx = (int)i;
-                    break;
-                }
-            }
+             * request belongs to, by address and then by self URN
+             * (sk_select.c says why self alone is not enough), (2) reachable
+             * "master" servers by self URN, (3) any reachable server by self
+             * URN. mDNS answer order is not stable, so never "first in the
+             * list". */
+            idx = espos_sk_find_anchored(s.servers, s.server_count, &anchor, cur_host, cur_port, fallback);
+            /* While the anchored address is only briefly silent, a server
+             * with its self is a twin until proven otherwise: electing it
+             * would cost the pairing just the same. */
+            bool twins_held = idx < 0 && anchor.host[0] && !fallback;
             for (int pass = 0; pass < 2 && idx < 0; pass++) {
                 for (size_t i = 0; i < s.server_count; i++) {
                     bool avoided = s.avoid_until_ms[i] && (int32_t)(s.avoid_until_ms[i] - t) > 0;
                     bool master = strstr(s.servers[i].roles, "master") != NULL;
-                    if (avoided || (pass == 0 && !master)) {
+                    if (avoided || (pass == 0 && !master) ||
+                        (twins_held && strcmp(s.servers[i].self, anchor.self) == 0)) {
                         continue;
                     }
-                    if (idx < 0 || strcmp(s.servers[i].self, s.servers[idx].self) < 0) {
+                    if (idx < 0 || espos_sk_disc_before(&s.servers[i], &s.servers[idx], cur_host, cur_port)) {
                         idx = (int)i;
                     }
                 }
@@ -530,7 +605,7 @@ static void run_discovery(void)
      * dropped out of one query (mDNS is lossy) for two intervals. */
     uint32_t avoid[ESPOS_SK_MAX_SERVERS] = { 0 };
     size_t m = 0;
-    /* The server our token belongs to is kept unconditionally.
+    /* The server our token belongs to gets the first slot.
      *
      * Fresh results used to fill the array first, so on a network
      * advertising ESPOS_SK_MAX_SERVERS or more the carry-over loop below
@@ -539,31 +614,43 @@ static void run_discovery(void)
      * anchor lookup in select_server() found nothing, and a perfectly
      * reachable server was dropped with "no server". Reserving its slot
      * first means a full list can never cost us the one entry that
-     * matters. */
-    const char *keep = s.sm.store.token[0] ? s.sm.store.token_self : (s.sm.store.pending_href[0] ? s.sm.store.pending_self : "");
+     * matters.
+     *
+     * Reserved by address, not by self URN: a second server advertising
+     * the same self (sk_select.c) would otherwise take the slot whenever
+     * mDNS answered for it first. And only while it is as fresh as any
+     * carried-over entry: a server that moved must age out at its old
+     * address, or the stale entry would keep winning select_server()'s
+     * address match and the device would never follow it. */
+    espos_sk_anchor_t anchor;
+    espos_sk_store_anchor(&s.sm.store, &anchor);
+    anchor_note_answers(&anchor, found, n);
+    int keep = espos_sk_find_anchored(s.servers, s.server_count, &anchor, s.have_server ? s.server.host : "",
+                                      s.have_server ? s.server.port : 0, anchor_self_fallback(&anchor));
     bool keep_reserved = false;
-    if (keep[0]) {
-        for (size_t i = 0; i < s.server_count; i++) {
-            if (strcmp(s.servers[i].self, keep) != 0) {
-                continue;
+    char keep_host[ESPOS_SK_HOST_MAX] = "";
+    uint16_t keep_port = 0;
+    if (keep >= 0) {
+        /* Prefer this round's fresher copy if mDNS did answer for it. */
+        bool fresh = false;
+        for (size_t k = 0; k < n; k++) {
+            if (espos_sk_same_addr(&found[k], s.servers[keep].host, s.servers[keep].port)) {
+                merged[m] = found[k];
+                merged[m].seen_ms = t;
+                fresh = true;
+                break;
             }
-            /* Prefer this round's fresher copy if mDNS did answer for it. */
-            bool fresh = false;
-            for (size_t k = 0; k < n; k++) {
-                if (strcmp(found[k].self, keep) == 0) {
-                    merged[m] = found[k];
-                    merged[m].seen_ms = t;
-                    fresh = true;
-                    break;
-                }
-            }
-            if (!fresh) {
-                merged[m] = s.servers[i];
-            }
-            avoid[m] = s.avoid_until_ms[i];
+        }
+        if (!fresh && (int32_t)(t - s.servers[keep].seen_ms) < (int32_t)carry_window_ms()) {
+            merged[m] = s.servers[keep];
+            fresh = true;
+        }
+        if (fresh) {
+            snprintf(keep_host, sizeof(keep_host), "%s", merged[m].host);
+            keep_port = merged[m].port;
+            avoid[m] = s.avoid_until_ms[keep];
             m++;
             keep_reserved = true;
-            break;
         }
     }
     for (size_t i = 0; i < n && m < ESPOS_SK_MAX_SERVERS; i++) {
@@ -572,7 +659,7 @@ static void run_discovery(void)
          * reservation did NOT run — the empty-s.servers[] case on a
          * fresh boot with a token restored from NVS, which is exactly
          * when it must not be lost. */
-        if (keep_reserved && strcmp(found[i].self, keep) == 0) {
+        if (keep_reserved && espos_sk_same_addr(&found[i], keep_host, keep_port)) {
             continue;
         }
         merged[m] = found[i];
@@ -592,7 +679,7 @@ static void run_discovery(void)
                 break;
             }
         }
-        if (!dup && (int32_t)(t - s.servers[i].seen_ms) < (int32_t)(2 * s.discover_interval_ms + 5000)) {
+        if (!dup && (int32_t)(t - s.servers[i].seen_ms) < (int32_t)carry_window_ms()) {
             avoid[m] = s.avoid_until_ms[i];
             merged[m++] = s.servers[i];
         }
@@ -662,6 +749,8 @@ static void handle_cmd(const cmd_t *c)
          * anyway and would refuse a duplicate; polling just resumes. */
         s.sm.store.token[0] = '\0';
         s.sm.store.token_self[0] = '\0';
+        s.sm.store.token_host[0] = '\0';
+        s.sm.store.token_port = 0;
         espos_sk_store_save(&s.sm.store);
         s.sm.st.has_token = false;
         espos_sk_tok_event(&s.sm, ESPOS_SK_EV_RETRY, NULL);
