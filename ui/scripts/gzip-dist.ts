@@ -13,8 +13,8 @@ import { gzipSync } from "node:zlib";
 const src = new URL("../dist/", import.meta.url).pathname;
 const dst = new URL("../../components/espos_httpd/ui-dist/", import.meta.url).pathname;
 
-async function walk(dir) {
-  const out = [];
+async function walk(dir: string): Promise<string[]> {
+  const out: string[] = [];
   for (const e of await fs.readdir(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) out.push(...(await walk(p)));

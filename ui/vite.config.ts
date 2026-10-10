@@ -3,7 +3,7 @@
 import { defineConfig, type Plugin } from "vite";
 import preact from "@preact/preset-vite";
 import checker from "vite-plugin-checker";
-import { startMock } from "./mock/server.mjs";
+import { startMock } from "./mock/server.ts";
 
 // `npm run dev` talks to ESPOS_API (a device or the host harness) when set,
 // otherwise to the in-process mock so no ESP32 is needed to work on the UI.
@@ -47,10 +47,11 @@ export default defineConfig({
      * showed: Vite strips types without checking them, so a mistake stayed
      * invisible until someone ran `npm run build`.
      *
-     * Dev only. `npm run build` already runs `tsc --noEmit` first, and that is
-     * the better gate -- it fails in seconds, before Vite spends time bundling
-     * something that cannot ship. Letting the plugin check the build as well
-     * would run tsc twice per CI build for no extra safety. */
+     * Dev only, and the app only (tsconfig.json): the Node-side files under
+     * tsconfig.node.json are left to `npm run typecheck`. `npm run build` runs
+     * that first, and it is the better gate -- it fails in seconds, before Vite
+     * spends time bundling something that cannot ship. Letting the plugin check
+     * the build as well would run tsc again for no extra safety. */
     checker({ typescript: true, enableBuild: false }),
     mockPlugin(),
     stripCrossorigin(),

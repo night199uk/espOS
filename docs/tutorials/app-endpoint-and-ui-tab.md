@@ -84,7 +84,7 @@ curl -N $D/events                                                      # event: 
 
 The page list is a registry ([ui.md](../ui.md)): your firmware keeps a small Vite
 project and calls espOS's entry point with its page registered first. Create `ui/` in
-the project: copy `package.json`, `tsconfig.json`, `index.html` and `scripts/gzip-dist.mjs` from `espos/ui/`;
+the project (Node 22.18+): copy `package.json`, `tsconfig.json`, `tsconfig.node.json`, `index.html` and `scripts/gzip-dist.ts` from `espos/ui/`;
 copy `vite.config.ts` too, minus the mock plugin (keep `preact()`, `build` and the `/api` proxy). Then two files:
 
 ```ts

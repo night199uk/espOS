@@ -7,11 +7,11 @@
 // a log ring, SSE, and the REST authentication (Bearer or the espos_sid
 // cookie, once httpd.api_key is set). Zero dependencies (node:http only).
 //
-//   node mock/server.mjs [port]      (vite dev starts it automatically)
+//   node mock/server.ts [port]       (vite dev starts it automatically)
 //
 // The schema is regenerated from the real descriptors when python3 is
 // available (components/espos_config/tools/espos_gen_config.py); otherwise mock/schema.json is used.
-import http from "node:http";
+import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, mkdtempSync } from "node:fs";
@@ -19,10 +19,32 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Config values are scalars: every schema property has a scalar type, and
+// validate() refuses anything else before it is stored.
+type Scalar = string | number | boolean | null;
+type ConfigDoc = Record<string, Record<string, Scalar>>;
+type Json = Scalar | Json[] | { [key: string]: Json };
+type JsonObject = { [key: string]: Json };
+
+interface SchemaProperty {
+  type?: string;
+  default?: Scalar;
+  minimum?: number;
+  maximum?: number;
+  maxLength?: number;
+  enum?: Scalar[];
+  pattern?: string;
+  "x-espos-secret"?: boolean;
+  "x-espos-restartRequired"?: boolean;
+}
+interface Schema {
+  properties: Record<string, { properties: Record<string, SchemaProperty> }>;
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..", "..");
 
-function loadSchema() {
+function loadSchema(): Schema {
   try {
     const gen = path.join(root, "components", "espos_config", "tools", "espos_gen_config.py");
     const descs = ["main/config/app.json", "components/espos_httpd/config/httpd.json",
@@ -31,67 +53,76 @@ function loadSchema() {
     const out = mkdtempSync(path.join(tmpdir(), "espos-mock-"));
     const r = spawnSync("python3", [gen, "--schema-out", path.join(out, "s.json"), "--c-out", path.join(out, "c.c"),
       "--h-out", path.join(out, "h.h"), ...descs], { stdio: "ignore" });
-    if (r.status === 0) return JSON.parse(readFileSync(path.join(out, "s.json"), "utf8"));
+    if (r.status === 0) return JSON.parse(readFileSync(path.join(out, "s.json"), "utf8")) as Schema;
   } catch { /* fall through */ }
-  return JSON.parse(readFileSync(path.join(here, "schema.json"), "utf8"));
+  return JSON.parse(readFileSync(path.join(here, "schema.json"), "utf8")) as Schema;
 }
 
-export function startMock(port = 8484) {
+export function startMock(port = 8484): http.Server {
   const schema = loadSchema();
   const etag = "mock" + Math.abs(hash(JSON.stringify(schema))).toString(16).slice(0, 12);
 
   // ---- state
-  const defaults = {};
+  const defaults: ConfigDoc = {};
   for (const [ns, o] of Object.entries(schema.properties)) {
-    defaults[ns] = {};
-    for (const [k, p] of Object.entries(o.properties)) defaults[ns][k] = p.default ?? null;
+    const d: Record<string, Scalar> = (defaults[ns] = {});
+    for (const [k, p] of Object.entries(o.properties)) d[k] = p.default ?? null;
   }
-  const stored = { wifi: { ssid0: "Marina-Guest", psk0: "hunter22" } };
-  const effective = () => {
-    const out = {};
+  const stored: ConfigDoc = { wifi: { ssid0: "Marina-Guest", psk0: "hunter22" } };
+  const effective = (): ConfigDoc => {
+    const out: ConfigDoc = {};
     for (const ns of Object.keys(defaults)) out[ns] = { ...defaults[ns], ...(stored[ns] ?? {}) };
     return out;
   };
-  const isSecret = (ns, k) => !!schema.properties[ns]?.properties[k]?.["x-espos-secret"];
-  const redacted = (ns) => {
+  // Every namespace the mock reads is in the schema, so this never falls back.
+  const cfg = (ns: string): Record<string, Scalar> => effective()[ns] ?? {};
+  const isSecret = (ns: string, k: string) => !!schema.properties[ns]?.properties[k]?.["x-espos-secret"];
+  const redacted = (ns: string | null): ConfigDoc => {
     const doc = effective();
-    const pick = ns ? { [ns]: doc[ns] } : doc;
+    const pick: ConfigDoc = ns ? { [ns]: doc[ns] ?? {} } : doc;
     for (const [n, o] of Object.entries(pick)) for (const k of Object.keys(o)) if (isSecret(n, k)) o[k] = o[k] ? "********" : "";
     return pick;
   };
 
   const boot = Date.now();
-  const logs = [];
+  const logs: { seq: number; line: string }[] = [];
   let logSeq = 1;
-  const clients = new Set();
-  const log = (lvl, tag, msg) => {
+  const clients = new Set<ServerResponse>();
+  const log = (lvl: string, tag: string, msg: string) => {
     const line = `${lvl} (${Date.now() - boot}) ${tag}: ${msg}`;
     logs.push({ seq: logSeq++, line });
     while (logs.length > 400) logs.shift();
     console.log("  [mock] " + line);
   };
-  const emit = (event, data) => {
+  const emit = (event: string, data: unknown) => {
     const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const c of clients) c.write(chunk);
   };
   let logsDirty = false;
   const origLog = log;
-  const logAndMark = (l, t, m) => { origLog(l, t, m); logsDirty = true; };
+  const logAndMark = (l: string, t: string, m: string) => { origLog(l, t, m); logsDirty = true; };
   setInterval(() => { if (logsDirty) { logsDirty = false; emit("logs", { next: logSeq }); } }, 500);
 
-  const wifi = {
+  interface WifiStatus {
+    state: string; sta_enabled: boolean; hostname: string; reason: { code: number; text: string };
+    connect_count: number; disconnect_count: number; attempt: number;
+    portal: { active: boolean; ssid: string; force: string; ip: string; clients: number };
+    ssid?: Scalar | undefined; network_index?: number; backoff_ms?: number;
+    ip?: string; gateway?: string; netmask?: string; rssi?: number; channel?: number; bssid?: string;
+  }
+  const wifi: WifiStatus = {
     state: "unconfigured", sta_enabled: true, hostname: "espos-1a2b", reason: { code: 0, text: "" },
     connect_count: 0, disconnect_count: 0, attempt: 0,
     portal: { active: true, ssid: "espOS-1a2b", force: "auto", ip: "192.168.4.1", clients: 0 },
   };
-  let wifiTimer = null;
+  let wifiTimer: ReturnType<typeof setTimeout> | undefined;
   const wifiEmit = () => emit("wifi", wifiStatus());
   const wifiStatus = () => ({ ...wifi });
   function wifiEval() {
     clearTimeout(wifiTimer);
-    const cfg = effective().wifi;
-    const nets = [0, 1, 2, 3].map((i) => cfg[`ssid${i}`]).filter(Boolean);
-    if (!cfg.sta_enabled) {
+    const c = cfg("wifi");
+    const nets = [0, 1, 2, 3].map((i) => c[`ssid${i}`]).filter(Boolean);
+    if (!c.sta_enabled) {
       Object.assign(wifi, { state: "disabled", reason: { code: 1005, text: "station disabled by configuration" } });
       wifi.portal.active = true; delete wifi.ip; return wifiEmit();
     }
@@ -113,7 +144,7 @@ export function startMock(port = 8484) {
       }
       Object.assign(wifi, { state: "obtaining_ip" }); wifiEmit();
       wifiTimer = setTimeout(() => {
-        const r = scanResults.find((x) => x.ssid === wifi.ssid);
+        const r = scanResults.find((x) => x.ssid === wifi.ssid)!;
         Object.assign(wifi, { state: "connected", ip: "192.168.1.42", gateway: "192.168.1.1", netmask: "255.255.255.0",
           rssi: r.rssi, channel: r.channel, bssid: r.bssid, connect_count: wifi.connect_count + 1, reason: { code: 0, text: "" } });
         delete wifi.backoff_ms; wifi.portal.active = false; wifiEmit();
@@ -127,7 +158,7 @@ export function startMock(port = 8484) {
     { ssid: "Boat", bssid: "de:ad:be:ef:00:01", rssi: -48, channel: 6, auth: "wpa2/wpa3" },
     { ssid: "Harbour Cafe", bssid: "de:ad:be:ef:00:07", rssi: -84, channel: 1, auth: "open" },
   ];
-  let scan = { scanning: false, age_s: null, results: [] };
+  let scan: { scanning: boolean; age_s: number | null; results: typeof scanResults } = { scanning: false, age_s: null, results: [] };
   let scanAt = 0;
 
   // ---- SignalK
@@ -135,13 +166,22 @@ export function startMock(port = 8484) {
     { host: "192.168.1.10", port: 80, self: "urn:mrn:signalk:uuid:0e6d1a1a-1111-4111-8111-000000000099", name: "boat", roles: "master,main", swname: "signalk-server", swvers: "2.31.1" },
     { host: "192.168.1.11", port: 3000, self: "urn:mrn:signalk:uuid:0e6d1a1a-2222-4222-8222-000000000042", name: "nav-pc", roles: "master,main", swname: "signalk-server", swvers: "2.30.0" },
   ];
+  interface SkServer {
+    source: string; host?: Scalar | undefined; port?: Scalar | undefined; self?: Scalar | undefined;
+    name?: Scalar | undefined; swname?: Scalar | undefined; swvers?: Scalar | undefined;
+  }
+  interface SkToken {
+    state: string; has_token: boolean; busy: boolean; last_http_status: number; last_error: string;
+    counts: { requests: number; approved: number; denied: number; unauthorized: number };
+    pending_s?: number; pending_href?: string; approved_s?: number;
+  }
   const sk = {
-    token: { state: "no_server", has_token: false, busy: false, last_http_status: 0, last_error: "", counts: { requests: 0, approved: 0, denied: 0, unauthorized: 0 } },
-    server: { source: "none" }, client_id: "9cf791de-aa92-4830-a958-0388a42ef72b", description: "espOS espos-1a2b", permissions: "readwrite",
-    discovery: { enabled: true, count: 0, last_s: null },
+    token: { state: "no_server", has_token: false, busy: false, last_http_status: 0, last_error: "", counts: { requests: 0, approved: 0, denied: 0, unauthorized: 0 } } as SkToken,
+    server: { source: "none" } as SkServer, client_id: "9cf791de-aa92-4830-a958-0388a42ef72b", description: "espOS espos-1a2b", permissions: "readwrite",
+    discovery: { enabled: true, count: 0, last_s: null as number | null },
     ws: { enabled: true, connected: false, reconnects: 0, sent: 0, send_errors: 0, pending: 0, buffered: 0, buffered_bytes: 0, dropped: 0, last_error: "", meta: { declared: 3, reconciled: 0 }, in: { subs: 2, frames: 0, received: 0 }, put: { pending: 0, ok: 0, failed: 0 } },
   };
-  let discovered = [];
+  let discovered: ((typeof servers)[number] & { seen_s: number })[] = [];
   let discoverAt = 0;
   let pendingAt = 0;
   const skEmit = () => emit("sk", skStatus());
@@ -159,15 +199,15 @@ export function startMock(port = 8484) {
     logAndMark("I", "espos_sk", `discovery: ${discovered.length} server(s)`);
     emit("sk_servers", serversDoc());
     if (sk.server.source === "none") {
-      const cfg = effective().sk;
-      const pick = cfg.server_host ? { host: cfg.server_host, port: cfg.server_port, self: cfg.server_self || "", source: "manual", name: cfg.server_host }
+      const c = cfg("sk");
+      const pick: SkServer = c.server_host ? { host: c.server_host, port: c.server_port, self: c.server_self || "", source: "manual", name: c.server_host }
         : { ...discovered[0], source: "discovered" };
       sk.server = { host: pick.host, port: pick.port, self: pick.self, source: pick.source, name: pick.name, swname: pick.swname ?? "", swvers: pick.swvers ?? "" };
       skRequest();
     }
   }
   const serversDoc = () => ({ servers: discovered.map((s) => ({ ...s, selected: s.self === sk.server.self })), last_s: discoverAt ? Math.round((Date.now() - discoverAt) / 1000) : null });
-  let approveTimer = null;
+  let approveTimer: ReturnType<typeof setTimeout> | undefined;
   function skRequest() {
     if (sk.token.has_token) return;
     Object.assign(sk.token, { state: "requesting", busy: true }); skEmit();
@@ -186,10 +226,10 @@ export function startMock(port = 8484) {
       }, 12000);
     }, 800);
   }
-  let wsTimer = null;
+  let wsTimer: ReturnType<typeof setInterval> | undefined;
   function wsConnect() {
     clearTimeout(wsTimer);
-    if (!sk.token.has_token || !effective().sk.ws_enabled || wifi.state !== "connected") {
+    if (!sk.token.has_token || !cfg("sk").ws_enabled || wifi.state !== "connected") {
       if (sk.ws.connected) { sk.ws.connected = false; emit("sk_ws", sk.ws); }
       return;
     }
@@ -197,7 +237,10 @@ export function startMock(port = 8484) {
     sk.ws.meta.reconciled = sk.ws.meta.declared;
     emit("sk_ws", sk.ws); skEmit();
     logAndMark("I", "espos_skws", `stream connected to ${sk.server.host}:${sk.server.port}`);
-    wsTimer = setInterval(() => { sk.ws.sent += 2; sk.ws.connected_s += 5; sk.ws.in.frames += 9; sk.ws.in.received += 12; }, 5000);
+    // connected_s exists from the Object.assign above on. It stays out of the
+    // literal so /sk/status keeps omitting it until the stream first connects.
+    const ws = sk.ws as typeof sk.ws & { connected_s: number };
+    wsTimer = setInterval(() => { sk.ws.sent += 2; ws.connected_s += 5; sk.ws.in.frames += 9; sk.ws.in.received += 12; }, 5000);
   }
   function skForget() {
     Object.assign(sk.token, { state: "no_server", has_token: false, busy: false, last_http_status: 0, last_error: "" });
@@ -212,24 +255,26 @@ export function startMock(port = 8484) {
   const ota = {
     state: "idle", last_error: "",
     running: { version: "0.5.0-mock", project: "espos", target: "esp32c6", slot: "ota_0", image_state: "valid", pending_verify: false, confirmed: true, other_slot: "ota_1", other_version: "0.4.9", rolled_back: false, built: "Aug 18 2026 12:00:00", idf: "v6.0.2", key_fp: "b3381b48b9cc9941" },
-    manifest: { url: "", channel: "stable", auto_check: true, auto_install: false, last_check_s: null, next_check_s: null },
-    progress: { received: 0, total: 0 }, available: null,
+    manifest: { url: "" as Scalar | undefined, channel: "stable" as Scalar | undefined, auto_check: true as Scalar | undefined, auto_install: false as Scalar | undefined,
+      last_check_s: null as number | null, next_check_s: null as number | null },
+    progress: { received: 0, total: 0 },
+    available: null as { version: string; url: string; size: number; sha256: string; notes: string; newer: boolean } | null,
   };
   let checkAt = 0;
-  const otaStatus = () => { const c = effective().ota; ota.manifest.url = c.manifest_url; ota.manifest.channel = c.channel; ota.manifest.auto_check = c.auto_check; ota.manifest.auto_install = c.auto_install; ota.manifest.last_check_s = checkAt ? Math.round((Date.now() - checkAt) / 1000) : null; ota.manifest.next_check_s = checkAt && c.auto_check ? c.check_h * 3600 - ota.manifest.last_check_s : null; return ota; };
+  const otaStatus = () => { const c = cfg("ota"); const last = checkAt ? Math.round((Date.now() - checkAt) / 1000) : null; ota.manifest.url = c.manifest_url; ota.manifest.channel = c.channel; ota.manifest.auto_check = c.auto_check; ota.manifest.auto_install = c.auto_install; ota.manifest.last_check_s = last; ota.manifest.next_check_s = last !== null && c.auto_check ? Number(c.check_h) * 3600 - last : null; return ota; };
   const otaEmit = () => emit("ota", otaStatus());
   function otaCheck() {
-    const c = effective().ota;
+    const c = cfg("ota");
     if (!c.manifest_url) { Object.assign(ota, { state: "failed", last_error: "no manifest URL configured" }); return otaEmit(); }
     Object.assign(ota, { state: "checking", last_error: "" }); otaEmit();
     setTimeout(() => {
       checkAt = Date.now();
-      ota.available = { version: "0.5.1", url: new URL("espos-esp32c6-0.5.1.bin", c.manifest_url).href, size: 1180000, sha256: "", notes: "mock: bug fixes", newer: true };
+      ota.available = { version: "0.5.1", url: new URL("espos-esp32c6-0.5.1.bin", String(c.manifest_url)).href, size: 1180000, sha256: "", notes: "mock: bug fixes", newer: true };
       ota.state = "available"; otaEmit();
       logAndMark("I", "espos_ota", "manifest: 0.5.1 available (running 0.5.0-mock)");
     }, 900);
   }
-  function otaInstall(url) {
+  function otaInstall(url: string) {
     if (url.includes("unsigned")) {
       Object.assign(ota, { state: "downloading", progress: { received: 0, total: 900000 } }); otaEmit();
       setTimeout(() => { Object.assign(ota, { state: "failed", last_error: "image rejected: bad signature or corrupt (ESP_ERR_OTA_VALIDATE_FAILED)" }); otaEmit(); }, 2500);
@@ -254,12 +299,14 @@ export function startMock(port = 8484) {
   // origin of any port on top of the exact match: the Vite dev server proxies
   // the UI (origin localhost:5173) to this mock (host 127.0.0.1:8484), so the
   // strict rule the device applies would refuse every save in development.
-  const auth = { sessions: new Map(), fails: 0, failFirst: 0, lockedUntil: 0 };
-  const apiKey = () => String(effective().httpd?.api_key ?? "");
+  const auth = { sessions: new Map<string, { expires: number }>(), fails: 0, failFirst: 0, lockedUntil: 0 };
+  const apiKey = () => String(effective()["httpd"]?.["api_key"] ?? "");
   const authRequired = () => apiKey() !== "";
-  const cookies = (req) => Object.fromEntries((req.headers.cookie ?? "").split(";").map((c) => c.trim().split("=", 2)).filter((kv) => kv.length === 2));
+  const cookies = (req: IncomingMessage) => Object.fromEntries((req.headers.cookie ?? "").split(";").map((c) => c.trim().split("=", 2)).filter((kv): kv is [string, string] => kv.length === 2));
+  // A session id is never empty, so a missing cookie finds no session either way.
+  const sessionId = (req: IncomingMessage) => cookies(req)["espos_sid"] ?? "";
   const throttled = () => Date.now() < auth.lockedUntil;
-  function checkKey(k) {
+  function checkKey(k: string) {
     if (throttled()) return "throttled";
     if (k === apiKey()) { auth.fails = 0; return "ok"; }
     const now = Date.now();
@@ -267,24 +314,24 @@ export function startMock(port = 8484) {
     if (++auth.fails >= 5) { auth.lockedUntil = now + 30000; auth.fails = 0; logAndMark("W", "espos_auth", "too many failed keys: refusing key checks for 30 s"); }
     return "bad";
   }
-  const originOk = (req) => {
+  const originOk = (req: IncomingMessage) => {
     const o = req.headers.origin ?? req.headers.referer;
     if (!o) return false;
     try { const a = new URL(o).host; return a === (req.headers.host ?? "") || /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(a); } catch { return false; }
   };
-  const throttle429 = (res) => { res.setHeader("Retry-After", String(Math.max(1, Math.ceil((auth.lockedUntil - Date.now()) / 1000)))); return err(res, 429, "too_many_attempts", "too many failed keys; wait before trying again"); };
+  const throttle429 = (res: ServerResponse) => { res.setHeader("Retry-After", String(Math.max(1, Math.ceil((auth.lockedUntil - Date.now()) / 1000)))); return err(res, 429, "too_many_attempts", "too many failed keys; wait before trying again"); };
   // The method the request authenticated with ("none" when it did not), or
   // false when a refusal has been sent (never for a public endpoint).
-  function authenticate(req, res, isPublic) {
-    const stateChanging = !["GET", "HEAD", "OPTIONS"].includes(req.method);
-    let method = "none", verdict = "allow";
+  function authenticate(req: IncomingMessage, res: ServerResponse, isPublic: boolean): "none" | "bearer" | "cookie" | false {
+    const stateChanging = !["GET", "HEAD", "OPTIONS"].includes(req.method ?? "");
+    let method: "none" | "bearer" | "cookie" = "none", verdict = "allow";
     const bearer = req.headers.authorization;
     if (!authRequired()) verdict = "allow";
     else if (bearer && /^bearer /i.test(bearer)) {
       const r = checkKey(bearer.slice(7).trim());
       if (r === "ok") method = "bearer"; else verdict = r === "throttled" ? "throttled" : "unauthorized";
     } else {
-      const s = auth.sessions.get(cookies(req).espos_sid);
+      const s = auth.sessions.get(sessionId(req));
       if (s && s.expires > Date.now()) { method = "cookie"; if (stateChanging && !originOk(req)) verdict = "origin"; }
       else verdict = "unauthorized";
     }
@@ -296,20 +343,24 @@ export function startMock(port = 8484) {
   }
 
   // ---- HTTP
-  const json = (res, status, body, headers = {}) => {
+  const json = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
     const data = JSON.stringify(body);
     res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers });
     res.end(data);
   };
-  const err = (res, status, code, message, extra = {}) => json(res, status, { error: code, message, ...extra });
+  const err = (res: ServerResponse, status: number, code: string, message: string, extra: Record<string, unknown> = {}) => json(res, status, { error: code, message, ...extra });
   // Health conditions. `drills` holds whatever POST /health/test has raised; a key
   // stays in the map once seen, at "normal", which is what the device does -- a
   // condition keeps its table slot for the life of the boot.
-  const drills = new Map();
+  type HealthState = "normal" | "warn" | "alarm";
+  interface Condition { key: string; state: HealthState; message: string; reboot_on_alarm: boolean }
+  const healthStates: readonly string[] = ["normal", "warn", "alarm"];
+  const isHealthState = (s: string): s is HealthState => healthStates.includes(s);
+  const drills = new Map<string, Condition>();
   // Deadlines live apart from the drill objects so they never appear in a response.
   // The device clears a drill on the policy tick once its ttl is up; a mock that
   // kept one raised for ever would teach the UI that drills are permanent.
-  const drillDeadlines = new Map();
+  const drillDeadlines = new Map<string, number>();
   const expireDrills = () => {
     const now = Date.now();
     for (const [k, due] of drillDeadlines) {
@@ -322,25 +373,30 @@ export function startMock(port = 8484) {
   };
   const healthBody = () => {
     expireDrills();
-    const builtins = [
+    const builtins: Condition[] = [
       { key: "lowMemory", state: "normal", message: "", reboot_on_alarm: true },
       { key: "memoryTrough", state: "warn",
         message: "internal RAM low-water mark below 10 KB since boot", reboot_on_alarm: false },
       { key: "netDown", state: "normal", message: "", reboot_on_alarm: false },
     ];
     const conditions = [...builtins, ...drills.values()];
-    const rank = { normal: 0, warn: 1, alarm: 2 };
-    const worst = conditions.reduce((w, c) => (rank[c.state] > rank[w] ? c.state : w), "normal");
+    const rank: Record<HealthState, number> = { normal: 0, warn: 1, alarm: 2 };
+    const worst = conditions.reduce<HealthState>((w, c) => (rank[c.state] > rank[w] ? c.state : w), "normal");
     const fatal = conditions.find((c) => c.state === "alarm" && c.reboot_on_alarm);
     return { worst, fatal: fatal ? fatal.key : null, conditions };
   };
-  const body = (req) => new Promise((resolve) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => resolve(b)); });
-  const needJson = (req, res) => {
+  const body = (req: IncomingMessage) => new Promise<string>((resolve) => { let b = ""; req.on("data", (c: Buffer) => (b += c.toString())); req.on("end", () => resolve(b)); });
+  // What the request body parses to, or null when it does not parse. JSON.parse
+  // can only produce Json, which is what lets the handlers narrow it.
+  const parseBody = async (req: IncomingMessage, empty?: string): Promise<Json> => { try { return JSON.parse((await body(req)) || (empty ?? "")) as Json; } catch { return null; } };
+  // A member of a parsed body. An array has none of the keys the API uses.
+  const field = (o: Json, k: string): Json | undefined => (o && typeof o === "object" && !Array.isArray(o) ? o[k] : undefined);
+  const needJson = (req: IncomingMessage, res: ServerResponse) => {
     if (!/^application\/json/.test(req.headers["content-type"] ?? "")) { err(res, 415, "unsupported_media_type", "Content-Type: application/json required"); return false; }
     return true;
   };
 
-  function validate(ns, k, v) {
+  function validate(ns: string, k: string, v: Json) {
     const p = schema.properties[ns]?.properties[k];
     if (!p) return `unknown key ${ns}.${k}`;
     if (v === null) return null;
@@ -350,15 +406,19 @@ export function startMock(port = 8484) {
     if (p.type === "string" && typeof v !== "string") return "expected string";
     if (typeof v === "number" && ((p.minimum !== undefined && v < p.minimum) || (p.maximum !== undefined && v > p.maximum))) return `out of range [${p.minimum},${p.maximum}]`;
     if (typeof v === "string" && p.maxLength !== undefined && v.length > p.maxLength) return `longer than ${p.maxLength}`;
-    if (p.enum && !p.enum.includes(v)) return `not one of ${p.enum.join(", ")}`;
-    if (p.pattern && !new RegExp(p.pattern).test(v)) return `does not match ${p.pattern}`;
+    if (p.enum && !p.enum.some((e) => e === v)) return `not one of ${p.enum.join(", ")}`;
+    // The generator puts a pattern on string keys only, and a non-string was refused above.
+    if (p.pattern && typeof v === "string" && !new RegExp(p.pattern).test(v)) return `does not match ${p.pattern}`;
     return null;
   }
 
-  const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, "http://x");
+  // node:http ignores what a listener returns, so the promise is dropped on
+  // purpose; handle() catches everything itself.
+  const server = http.createServer((req, res) => { void handle(req, res); });
+  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? "", "http://x");
     const p = url.pathname;
-    const m = req.method;
+    const m = req.method ?? "";
     if (!p.startsWith("/api/v1/")) return err(res, 404, "not_found", "no such resource");
     const r = p.slice("/api/v1".length);
     try {
@@ -370,24 +430,25 @@ export function startMock(port = 8484) {
       if (r === "/auth/login" && m === "POST") {
         if (!needJson(req, res)) return;
         if (!authRequired()) return err(res, 409, "auth_open", "no API key is configured; the API is open");
-        let doc; try { doc = JSON.parse(await body(req)); } catch { doc = null; }
-        if (!doc || typeof doc.key !== "string") return err(res, 400, "validation", "expected {\"key\": \"...\"}");
-        const rr = checkKey(doc.key);
+        const doc = await parseBody(req);
+        const key = field(doc, "key");
+        if (!doc || typeof key !== "string") return err(res, 400, "validation", "expected {\"key\": \"...\"}");
+        const rr = checkKey(key);
         if (rr === "throttled") return throttle429(res);
         if (rr === "bad") { logAndMark("W", "espos_auth", "login refused: wrong key"); return err(res, 401, "unauthorized", "wrong key"); }
         const sid = randomUUID().replace(/-/g, "");
-        const ttl = Number(effective().httpd.session_ttl_s ?? 86400);
-        if (auth.sessions.size >= 4) auth.sessions.delete(auth.sessions.keys().next().value);   // oldest first, like the device's LRU
+        const ttl = Number(cfg("httpd").session_ttl_s ?? 86400);
+        if (auth.sessions.size >= 4) auth.sessions.delete(auth.sessions.keys().next().value ?? "");   // oldest first, like the device's LRU
         auth.sessions.set(sid, { expires: Date.now() + ttl * 1000 });
         logAndMark("I", "espos_auth", `login: session opened (${ttl} s)`);
         res.writeHead(204, { "Set-Cookie": `espos_sid=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${ttl}`, "Cache-Control": "no-store" });
-        return res.end();
+        res.end(); return;
       }
       if (r === "/auth/logout" && m === "POST") {
         if (!needJson(req, res)) return;
-        if (auth.sessions.delete(cookies(req).espos_sid)) logAndMark("I", "espos_auth", "logout: session closed");
+        if (auth.sessions.delete(sessionId(req))) logAndMark("I", "espos_auth", "logout: session closed");
         res.writeHead(204, { "Set-Cookie": "espos_sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0", "Cache-Control": "no-store" });
-        return res.end();
+        res.end(); return;
       }
       if (r === "/system/ping" && m === "GET") return json(res, 200, { app: "espos", version: "0.5.0-mock", auth: authRequired() });
       // ---- system
@@ -429,8 +490,8 @@ export function startMock(port = 8484) {
       if (r === "/system/coredump" && m === "DELETE") return json(res, 200, { status: "erased" });
       // ---- config
       if (r === "/config/schema" && m === "GET") {
-        if (req.headers["if-none-match"] === `"${etag}"`) { res.writeHead(304); return res.end(); }
-        res.writeHead(200, { "Content-Type": "application/schema+json", ETag: `"${etag}"` }); return res.end(JSON.stringify(schema));
+        if (req.headers["if-none-match"] === `"${etag}"`) { res.writeHead(304); res.end(); return; }
+        res.writeHead(200, { "Content-Type": "application/schema+json", ETag: `"${etag}"` }); res.end(JSON.stringify(schema)); return;
       }
       if (r === "/config" && m === "GET") {
         const ns = url.searchParams.get("ns");
@@ -439,7 +500,7 @@ export function startMock(port = 8484) {
       }
       if (r === "/config" && m === "PUT") {
         if (!needJson(req, res)) return;
-        let doc; try { doc = JSON.parse(await body(req)); } catch { return err(res, 400, "validation", "malformed JSON", { path: "" }); }
+        let doc: Json; try { doc = JSON.parse(await body(req)) as Json; } catch { return err(res, 400, "validation", "malformed JSON", { path: "" }); }
         if (!doc || typeof doc !== "object" || Array.isArray(doc)) return err(res, 400, "validation", "expected object of namespaces", { path: "" });
         for (const [ns, o] of Object.entries(doc)) {
           if (!schema.properties[ns]) return err(res, 400, "validation", `unknown namespace ${ns}`, { path: ns });
@@ -449,20 +510,22 @@ export function startMock(port = 8484) {
         const before = effective();
         const changed = [];
         let restart = false;
-        for (const [ns, o] of Object.entries(doc)) for (const [k, v] of Object.entries(o)) {
+        // The loop above has checked every namespace is an object and every
+        // value passes validate(), which admits scalars only.
+        for (const [ns, o] of Object.entries(doc)) for (const [k, v] of Object.entries(o as JsonObject)) {
           if (isSecret(ns, k) && v === "********") continue;
-          stored[ns] ??= {};
-          if (v === null) delete stored[ns][k]; else stored[ns][k] = v;
-          if (JSON.stringify(effective()[ns][k]) !== JSON.stringify(before[ns][k])) {
+          const dst = (stored[ns] ??= {});
+          if (v === null) delete dst[k]; else dst[k] = v as Scalar;
+          if (JSON.stringify(effective()[ns]?.[k]) !== JSON.stringify(before[ns]?.[k])) {
             changed.push(`${ns}.${k}`);
-            if (schema.properties[ns].properties[k]["x-espos-restartRequired"]) restart = true;
+            if (schema.properties[ns]?.properties[k]?.["x-espos-restartRequired"]) restart = true;
             emit("config", { ns, key: k });
             logAndMark("I", "espos_config", `changed ${ns}.${k}`);
           }
         }
         if (changed.includes("httpd.api_key")) { auth.sessions.clear(); logAndMark(authRequired() ? "I" : "W", "espos_auth", authRequired() ? "API key set: protected endpoints need Bearer or a login" : "no API key set: the REST API is open to the network"); }
         if (changed.some((c) => c.startsWith("wifi."))) wifiEval();
-        if (changed.some((c) => c.startsWith("sk."))) { if (!effective().sk.ws_enabled) wsConnect(); else if (sk.token.has_token) wsConnect(); }
+        if (changed.some((c) => c.startsWith("sk."))) { if (!cfg("sk").ws_enabled) wsConnect(); else if (sk.token.has_token) wsConnect(); }
         return json(res, 200, { changed, restart_required: restart });
       }
       // ---- wifi
@@ -488,40 +551,40 @@ export function startMock(port = 8484) {
       if (r === "/health" && m === "GET") return json(res, 200, healthBody());
       if (r === "/health/test" && m === "POST") {
         if (!needJson(req, res)) return;
-        let b;
-        try { b = JSON.parse((await body(req)) || "{}"); } catch { b = null; }
+        const b = await parseBody(req, "{}");
         if (!b || typeof b !== "object") return err(res, 400, "bad_request", "not JSON");
-        if (typeof b.key !== "string" || typeof b.state !== "string") {
+        const key = field(b, "key"), state = field(b, "state"), message = field(b, "message"), ttl = field(b, "ttl_s");
+        if (typeof key !== "string" || typeof state !== "string") {
           return err(res, 400, "validation", "key and state are required strings");
         }
-        if (!b.key.startsWith("test.") || b.key === "test.") {
+        if (!key.startsWith("test.") || key === "test.") {
           return err(res, 400, "validation", 'key must start with "test." and name something');
         }
-        if (!["normal", "warn", "alarm"].includes(b.state)) {
+        if (!isHealthState(state)) {
           return err(res, 400, "validation", "state must be normal, warn or alarm");
         }
-        if (b.message !== undefined && b.message !== null && typeof b.message !== "string") {
+        if (message !== undefined && message !== null && typeof message !== "string") {
           return err(res, 400, "validation", "message must be a string");
         }
-        if (b.key.length >= 24 || (b.message ?? "").length >= 96) {
+        if (key.length >= 24 || (message ?? "").length >= 96) {
           return err(res, 400, "validation", "key must be under 24 bytes and message under 96");
         }
-        if (b.ttl_s !== undefined && b.ttl_s !== null) {
-          if (typeof b.ttl_s !== "number") return err(res, 400, "validation", "ttl_s must be a number");
-          if (b.ttl_s < 1 || b.ttl_s > 300) return err(res, 400, "validation", "ttl_s must be 1..300");
+        if (ttl !== undefined && ttl !== null) {
+          if (typeof ttl !== "number") return err(res, 400, "validation", "ttl_s must be a number");
+          if (ttl < 1 || ttl > 300) return err(res, 400, "validation", "ttl_s must be 1..300");
         }
         // The table filling is the one failure a well-formed request still meets,
         // and the UI has to tell the difference between that and a server fault.
-        if (b.key === "test.noslot") {
+        if (key === "test.noslot") {
           return err(res, 507, "no_slot",
                      "the condition table is full; reuse a test key or raise CONFIG_ESPOS_HEALTH_MAX_CONDITIONS");
         }
         // One drill at a time: raising a second clears the first.
         for (const c of drills.values()) c.state = "normal";
         drillDeadlines.clear();
-        drills.set(b.key, { key: b.key, state: b.state, message: b.message ?? "", reboot_on_alarm: false });
-        if (b.state !== "normal") {
-          drillDeadlines.set(b.key, Date.now() + (b.ttl_s ?? 45) * 1000);
+        drills.set(key, { key, state, message: message ?? "", reboot_on_alarm: false });
+        if (state !== "normal") {
+          drillDeadlines.set(key, Date.now() + (ttl ?? 45) * 1000);
         }
         return json(res, 200, healthBody());
       }
@@ -545,8 +608,9 @@ export function startMock(port = 8484) {
       if (r === "/sk/forget" && m === "POST") { if (!needJson(req, res)) return; skForget(); return json(res, 202, { status: "forgotten" }); }
       if (r === "/sk/token" && m === "POST") {
         if (!needJson(req, res)) return;
-        let doc; try { doc = JSON.parse(await body(req)); } catch { doc = null; }
-        if (!doc || typeof doc.token !== "string" || !doc.token) return err(res, 400, "validation", "expected {\"token\": \"...\"}");
+        const doc = await parseBody(req);
+        const token = field(doc, "token");
+        if (!doc || typeof token !== "string" || !token) return err(res, 400, "validation", "expected {\"token\": \"...\"}");
         Object.assign(sk.token, { state: "verifying", busy: true }); skEmit();
         setTimeout(() => { Object.assign(sk.token, { state: "approved", has_token: true, busy: false, approved_s: 0, last_http_status: 200 }); skEmit(); wsConnect(); }, 900);
         return json(res, 202, { status: "verifying" });
@@ -560,9 +624,10 @@ export function startMock(port = 8484) {
       if (r === "/ota" && m === "POST") {
         if (!needJson(req, res)) return;
         if (["checking", "downloading", "ready"].includes(ota.state)) return err(res, 409, "busy", "an update or check is in progress");
-        let doc; try { doc = JSON.parse((await body(req)) || "{}"); } catch { doc = null; }
+        const doc = await parseBody(req, "{}");
         if (!doc || typeof doc !== "object") return err(res, 400, "validation", "expected a JSON object");
-        if (doc.url) { if (!/^https?:\/\//.test(doc.url)) return err(res, 400, "validation", "expected an http(s) URL"); otaInstall(doc.url); }
+        const target = field(doc, "url");
+        if (target) { if (typeof target !== "string" || !/^https?:\/\//.test(target)) return err(res, 400, "validation", "expected an http(s) URL"); otaInstall(target); }
         else if (ota.available) otaInstall(ota.available.url);
         else return err(res, 404, "not_found", "no update known; check first");
         return json(res, 202, { status: "installing" });
@@ -581,11 +646,12 @@ export function startMock(port = 8484) {
       }
       if (r === "/logs/level" && m === "PUT") {
         if (!needJson(req, res)) return;
-        let doc; try { doc = JSON.parse(await body(req)); } catch { doc = null; }
-        const levels = ["none", "error", "warn", "info", "debug", "verbose"];
-        if (!doc || !levels.includes(doc.level)) return err(res, 400, "validation", "expected {\"level\": none|error|warn|info|debug|verbose[, \"tag\": \"...\"]}");
-        logAndMark("I", "espos_httpd", `log level ${doc.tag ?? "*"} = ${doc.level}`);
-        return json(res, 200, { tag: doc.tag ?? "*", level: doc.level });
+        const doc = await parseBody(req);
+        const levels: readonly Json[] = ["none", "error", "warn", "info", "debug", "verbose"];
+        const level = field(doc, "level"), tag = field(doc, "tag") ?? "*";
+        if (!doc || typeof level !== "string" || !levels.includes(level)) return err(res, 400, "validation", "expected {\"level\": none|error|warn|info|debug|verbose[, \"tag\": \"...\"]}");
+        logAndMark("I", "espos_httpd", `log level ${typeof tag === "string" ? tag : JSON.stringify(tag)} = ${level}`);
+        return json(res, 200, { tag, level });
       }
       // ---- events
       if (r === "/events" && m === "GET") {
@@ -605,7 +671,7 @@ export function startMock(port = 8484) {
     } catch (e) {
       return err(res, 500, "internal", String(e));
     }
-  });
+  }
   server.listen(port, "127.0.0.1", () => console.log(`  [mock] espOS API mock on http://127.0.0.1:${port}/api/v1`));
   logAndMark("I", "espos_config", "ready: 4 namespace(s)");
   logAndMark("I", "espos_httpd", "listening on :80");
@@ -614,7 +680,7 @@ export function startMock(port = 8484) {
   return server;
 }
 
-function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+function hash(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   startMock(Number(process.argv[2] ?? 8484));

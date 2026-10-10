@@ -189,7 +189,7 @@ reviews:
 
         - `docs/rest-api.md` is a contract; the repo says so itself. A
           route or JSON field change without a matching change to that
-          file and to `ui/mock/server.mjs` in the same PR is incomplete.
+          file and to `ui/mock/server.ts` in the same PR is incomplete.
           Every route is protected unless registered `ESPOS_HTTPD_PUBLIC`;
           a write without `Content-Type: application/json` gets 415 (that
           is the CSRF guard); secrets read back as `********`; `503
@@ -333,7 +333,7 @@ reviews:
       instructions: |
         This component owns the device's HTTP contract. `docs/rest-api.md`
         must change in the same PR as any route, field, status code or auth
-        rule, and `ui/mock/server.mjs` must mirror it. The consumers are
+        rule, and `ui/mock/server.ts` must mirror it. The consumers are
         the embedded UI (`ui/`), signalk-espos-manager (`src/device/*.ts`
         parse `/system/ping`, `/system/info`, `/ota/status`, `/config`
         by exact key name and treat `hardware` as optional) and any fleet
@@ -573,11 +573,11 @@ reviews:
     - path: "ui/**"
       instructions: |
         Preact + Vite + TypeScript, built by `npm run build` (`tsc`,
-        `vite build`, `scripts/gzip-dist.mjs`) into
+        `vite build`, `scripts/gzip-dist.ts`) into
         `components/espos_httpd/ui-dist/`, which is committed; a UI change
         must commit the rebuilt bundle or CI fails the freshness check.
         The bundle lives in a flash partition, so size is a budget: flag
-        a new dependency or a large asset. `ui/mock/server.mjs` and
+        a new dependency or a large asset. `ui/mock/server.ts` and
         `mock/schema.json` are the dependency-free API mock and must
         track every REST change. Devices are reached over plain http on a
         boat LAN: no secure-context-only browser APIs without a fallback.
@@ -682,7 +682,7 @@ reviews:
           api_coredump.c, auth.c, auth_policy.c, sse.c, static.c) or in any
           file under components/ that calls espos_httpd_register or
           espos_httpd_register_ex, pass only
-          when docs/rest-api.md and ui/mock/server.mjs are also changed in
+          when docs/rest-api.md and ui/mock/server.ts are also changed in
           this PR or the body states why they need no change. Fail otherwise.
           Pass when no such change is present.
       - name: Public header ABI bump

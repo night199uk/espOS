@@ -24,11 +24,9 @@
     "types": [
       "vite/client",
       "node"
-    ],
-    "allowJs": true
+    ]
   },
   "include": [
-    "src",
-    "vite.config.ts"
+    "src"
   ]
 }

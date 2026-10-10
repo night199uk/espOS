@@ -5,13 +5,16 @@
   "type": "module",
   "description": "espOS device web UI (Preact + Vite), served gzipped from the LittleFS storage partition",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node scripts/gzip-dist.mjs",
+    "build": "npm run typecheck && vite build && node scripts/gzip-dist.ts",
     "preview": "vite preview",
-    "mock": "node mock/server.mjs",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "mock": "node mock/server.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config ."
   },
   "dependencies": {
     "preact": "^11.0.0"
@@ -22,7 +25,6 @@
     "@types/node": "^26.6.4",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.13.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
     "vite": "^8.3.2",

@@ -6,11 +6,12 @@
 // into "[object Object]" -- all need the type checker, and a lint that cannot see
 // types mostly restates what tsc already refuses.
 //
-// The .mjs files (the API mock and the gzip step) are linted without type
-// information: they are Node scripts outside the app's tsconfig, and pulling a few
-// hundred lines of deliberately loose mock code into it would buy nothing.
+// The Node-side files (this config, vite.config.ts, the API mock and the gzip
+// step) are checked against tsconfig.node.json, with Node's globals and none of
+// the DOM's. Node runs the mock and the gzip step by stripping their types, and
+// ESLint loads this file the same way, which is what the --flag in `npm run lint`
+// turns on.
 import js from "@eslint/js";
-import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
@@ -22,7 +23,7 @@ export default tseslint.config(
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        project: ["./tsconfig.json", "./tsconfig.node.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -54,10 +55,5 @@ export default tseslint.config(
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
     },
-  },
-  {
-    files: ["**/*.mjs"],
-    extends: [tseslint.configs.disableTypeChecked],
-    languageOptions: { globals: globals.node },
   },
 );

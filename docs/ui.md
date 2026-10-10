@@ -58,7 +58,7 @@ ESPOS_API=http://192.168.0.118 npm run dev     # proxy /api to a real device…
 ESPOS_API=http://127.0.0.1:<port> npm run dev  # …or to the host harness (test/host/espos_httpd_test)
 ```
 
-`mock/server.mjs` (node, zero deps) implements the API contract with a
+`mock/server.ts` (Node runs it as TypeScript directly, zero deps) implements the API contract with a
 simulated WiFi state machine, discovery + token flow, a log ring, SSE, and
 the authentication (`/auth/*`, `/system/ping`, Bearer and cookie, the
 throttle; set `httpd.api_key` on the Config page to see the login page), and

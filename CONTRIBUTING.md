@@ -135,17 +135,22 @@ the person with the hardware — say in the PR which board that was.
 ## The web UI
 
 `ui/` is a Preact + Vite app served gzipped from the LittleFS partition
-([docs/ui.md](docs/ui.md)):
+([docs/ui.md](docs/ui.md)). It needs Node 22.18 or newer: the API mock, the
+gzip step and the ESLint config are TypeScript that Node runs as it is, with
+no build step of their own (`tsconfig.node.json` type-checks them). ESLint
+loads its TypeScript config only with `--flag unstable_native_nodejs_ts_config`,
+which `npm run lint` passes; an editor integration needs the same flag (for
+VS Code, `"eslint.options": { "flags": ["unstable_native_nodejs_ts_config"] }`):
 
 ```sh
 cd ui && npm ci
-npm run dev                              # Vite + ui/mock/server.mjs, no device needed
+npm run dev                              # Vite + ui/mock/server.ts, no device needed
 ESPOS_API=http://<device-ip> npm run dev # against a real device or the host harness
 npm run mock                             # the API mock alone, on :8484
 npm run build                            # → components/espos_httpd/ui-dist/, packed into storage.bin by the firmware build
 ```
 
-`ui/mock/server.mjs` implements `docs/rest-api.md` well enough to exercise
+`ui/mock/server.ts` implements `docs/rest-api.md` well enough to exercise
 every page and has no dependencies. When the contract changes, the mock
 changes in the same PR — otherwise the UI is developed against an API that
 no device has.
