@@ -110,13 +110,30 @@ function HardwareCard({ i }: { i: SystemInfo | undefined }) {
   const hw = i?.hardware;
   if (!hw) return null;
   const psram = hw.ram_psram_bytes ?? 0;
+  // Firmware older than flash_physical_bytes reports only the image's size.
+  const flash = hw.flash_physical_bytes ?? hw.flash_bytes;
   return (
     <section class="card">
       <h2>Hardware</h2>
       {hw.board && <Row k="Board">{hw.board}</Row>}
       {hw.mac && <Row k="MAC"><span class="mono">{hw.mac}</span></Row>}
       {hw.cpu_mhz !== undefined && <Row k="CPU">{hw.cpu_mhz} MHz</Row>}
-      {hw.flash_bytes !== undefined && <Row k="Flash">{fmtBytes(hw.flash_bytes)}</Row>}
+      {flash !== undefined && (
+        <Row k="Flash">
+          {fmtBytes(flash)}
+          {/* Only when the image was built for less than the chip: a cockpit
+              built for 16 MB on a 32 MB panel leaves half the chip unused.
+              Every table ends a little short of its chip, so showing the
+              partition end always would hide that case in noise. */}
+          {hw.flash_physical_bytes !== undefined && hw.flash_bytes !== undefined &&
+            hw.flash_bytes < hw.flash_physical_bytes && (
+            <span class="muted">
+              {" "}· firmware built for {fmtBytes(hw.flash_bytes)}
+              {hw.flash_partitioned_bytes !== undefined && `, ${fmtBytes(hw.flash_partitioned_bytes)} partitioned`}
+            </span>
+          )}
+        </Row>
+      )}
       {hw.ram_internal_bytes !== undefined && (
         <Row k="RAM">
           {fmtBytes(hw.ram_internal_bytes)} internal
