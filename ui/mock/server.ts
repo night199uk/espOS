@@ -169,6 +169,7 @@ export function startMock(port = 8484): http.Server {
   interface SkServer {
     source: string; host?: Scalar | undefined; port?: Scalar | undefined; self?: Scalar | undefined;
     name?: Scalar | undefined; swname?: Scalar | undefined; swvers?: Scalar | undefined;
+    by_self?: boolean;
   }
   interface SkToken {
     state: string; has_token: boolean; busy: boolean; last_http_status: number; last_error: string;
@@ -202,7 +203,7 @@ export function startMock(port = 8484): http.Server {
       const c = cfg("sk");
       const pick: SkServer = c.server_host ? { host: c.server_host, port: c.server_port, self: c.server_self || "", source: "manual", name: c.server_host }
         : { ...discovered[0], source: "discovered" };
-      sk.server = { host: pick.host, port: pick.port, self: pick.self, source: pick.source, name: pick.name, swname: pick.swname ?? "", swvers: pick.swvers ?? "" };
+      sk.server = { host: pick.host, port: pick.port, self: pick.self, source: pick.source, name: pick.name, swname: pick.swname ?? "", swvers: pick.swvers ?? "", by_self: false };
       skRequest();
     }
   }

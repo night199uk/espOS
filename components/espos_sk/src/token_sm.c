@@ -191,6 +191,18 @@ static bool handle_unauthorized(espos_sk_tok_sm_t *sm)
             return false;
         }
     }
+    if (sm->st.server.by_self) {
+        /* Likely a twin with our self URN: its "no" is about its own users.
+         * Clearing here is how a server restart used to cost the pairing --
+         * the twin answered while ours was down, and ours came back to a
+         * device with no token. Wait for ours; pinning this server by hand
+         * (a real move) makes its answer count again. */
+        sm->plain_unauth_streak = 0;
+        char m[ESPOS_SK_MSG_MAX];
+        snprintf(m, sizeof(m), "token refused here; waiting for %.40s or a manual pin", sm->store.token_host);
+        enter_error(sm, m);
+        return false;
+    }
     sm->plain_unauth_streak = 0;
     clear_token(sm);
     save(sm);
@@ -351,6 +363,12 @@ void espos_sk_tok_event(espos_sk_tok_sm_t *sm, espos_sk_tok_event_t ev, const vo
         bool self_compatible = srv && (srv->self[0] == '\0' || sm->st.server.self[0] == '\0' ||
                                        strcmp(srv->self, sm->st.server.self) == 0);
         if (same_addr && self_compatible) {
+            /* Whether it stands in for our server can change without the
+             * address changing (a request made here makes it the anchor). */
+            if (sm->st.server.by_self != srv->by_self) {
+                sm->st.server.by_self = srv->by_self;
+                notify(sm);
+            }
             /* same server; a self URN may have become known via mDNS */
             if (srv->self[0] && !sm->st.server.self[0]) {
                 snprintf(sm->st.server.self, sizeof(sm->st.server.self), "%s", srv->self);
@@ -574,6 +592,15 @@ void espos_sk_tok_event(espos_sk_tok_sm_t *sm, espos_sk_tok_event_t ev, const vo
             return;
         }
         if (r->http_status == 404 || (r->http_status == 500 && strstr(r->message, "not found"))) {
+            if (sm->st.server.by_self) {
+                /* A twin with our self URN never heard of the request; the
+                 * server that did is only out of sight. Keep it for that one. */
+                char m[ESPOS_SK_MSG_MAX];
+                snprintf(m, sizeof(m), "request unknown here; waiting for %.40s or a manual pin",
+                         sm->store.pending_host);
+                enter_error(sm, m);
+                return;
+            }
             /* the server forgot the request (restart, prune): start over */
             clear_pending(sm);
             save(sm);

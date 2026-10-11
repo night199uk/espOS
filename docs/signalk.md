@@ -89,8 +89,18 @@ Design points from the plan, all implemented:
   elected until the anchored address has dropped out of the discovery list
   (two discovery intervals plus 5 s without an answer) and gone unheard for
   two discovery rounds in which anything answered; rounds with no answers at
-  all (network down) do not count. After that it is taken to be our server at
-  a new address. Without this, mDNS answer order picked between the twins
+  all (network down) do not count. After that it may be our server at a new
+  address, so it is tried, but only as a stand-in (`server.by_self` in
+  `GET /sk/status`): a 401/403 from it, or a 404 for the pending request,
+  keeps the token and the request and waits (state `error`, with backoff)
+  rather than clearing them and asking that server for access. When the
+  anchored address answers again it is chosen again. If the server really
+  moved and has also revoked the token or pruned the request, pin it
+  (manual server, or "Use" in the server list): a pinned server's answer
+  counts again. Otherwise restarting the
+  real server long enough for two rounds handed the pairing to the twin for
+  good: the token was refused there, cleared, and replaced by a request on the
+  twin, which then became the anchor. Without the address anchor, mDNS answer order picked between the twins
   every round: a pending request polled on the other one came back 404 and
   was dropped, so the approval was never collected and the device kept
   asking. Among servers with the same self the one in use stays, then the

@@ -721,7 +721,7 @@ the cap is refused with `ESP_ERR_NO_MEM` and logged by `espos_sse`.
             "counts": {"requests": 1, "approved": 1, "denied": 0, "unauthorized": 0,
                        "cert_errors": 0}},
   "server": {"host": "192.168.1.10", "port": 80, "self": "urn:mrn:signalk:uuid:…",
-             "source": "discovered", "scheme": "http", "name": "boat",
+             "source": "discovered", "scheme": "http", "by_self": false, "name": "boat",
              "swname": "signalk-server", "swvers": "2.31.1"},
   "client_id": "…uuid…", "description": "espOS espos-1a2b", "permissions": "readwrite",
   "discovery": {"enabled": true, "count": 2, "last_s": 12},
@@ -737,7 +737,9 @@ the cap is refused with `ESP_ERR_NO_MEM` and logged by `espos_sse`.
 open error cert_error`; `pending_href`/`pending_s` while pending;
 `server.source` ∈ `discovered manual pinned none`; `server.scheme` ∈ `http
 https` — what is actually in use, which under `sk.scheme = auto` is the only
-place to read it. The token itself is never returned.
+place to read it. `server.by_self` is true while the server stands in for the
+one the token or pending request belongs to, found by its self URN while that
+address is silent; refusals from it do not cost the token (signalk.md). The token itself is never returned.
 
 `cert_error` means the server's TLS certificate is not the one this device
 trusts. The token is kept (it is the transport that is wrong, not the

@@ -191,15 +191,24 @@ export function SignalKPage() {
           <table>
             <thead><tr><th>Name</th><th>Address</th><th>Version</th><th></th></tr></thead>
             <tbody>
-              {(servers?.servers ?? []).map((s) => (
-                <tr key={s.self + s.host} class={s.selected ? "sel" : ""}>
+              {(servers?.servers ?? []).map((s, _i, all) => {
+                /* Two servers with one self URN (a test VM with the boat's
+                   MMSI): pinning the self cannot tell them apart, so pin the
+                   address instead. */
+                const twin = all.some((o) => o !== s && o.self === s.self);
+                const hostPinned = hostSel === s.host && (Number(cfg?.["server_port"]) || 80) === s.port;
+                return (
+                <tr key={s.self + s.host + ":" + String(s.port)} class={s.selected ? "sel" : ""}>
                   <td>{s.name}{s.roles?.includes("master") ? "" : <span class="muted small"> ({s.roles})</span>}<div class="mono small muted">{s.self}</div></td>
                   <td>{s.scheme === "https" ? <b>https</b> : "http"}://{s.host}:{s.port}</td>
                   <td>{s.swname} {s.swvers}</td>
-                  <td>{s.selected && selfSel === s.self ? <button onClick={() => void save({ server_self: null }, "Back to automatic selection.")}>Unpin</button>
+                  <td>{hostPinned ? <button onClick={() => void save({ server_host: null }, "Back to automatic selection.")}>Unpin</button>
+                    : s.selected && selfSel === s.self ? <button onClick={() => void save({ server_self: null }, "Back to automatic selection.")}>Unpin</button>
+                    : twin ? <button onClick={() => void save({ server_host: s.host, server_port: s.port, server_self: null }, `Using ${s.name} at ${s.host}.`)}>Use</button>
                     : <button onClick={() => void save({ server_self: s.self, server_host: null }, `Pinned ${s.name}.`)}>Use</button>}</td>
                 </tr>
-              ))}
+                );
+              })}
               {!(servers?.servers.length) && <tr><td colSpan={4} class="muted">No servers discovered yet (mDNS <span class="mono">_signalk-http._tcp</span>).</td></tr>}
             </tbody>
           </table>

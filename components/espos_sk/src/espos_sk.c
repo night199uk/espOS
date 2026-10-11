@@ -544,6 +544,9 @@ static void select_server(void)
             snprintf(chosen.host, sizeof(chosen.host), "%s", s.servers[idx].host);
             chosen.port = s.servers[idx].port;
             snprintf(chosen.self, sizeof(chosen.self), "%s", s.servers[idx].self);
+            /* A stand-in for the anchored address, found by its self URN. */
+            chosen.by_self = anchor.host[0] && anchor.self[0] && !espos_sk_is_anchor(&s.servers[idx], &anchor) &&
+                             strcmp(s.servers[idx].self, anchor.self) == 0;
             discovered_tls = s.servers[idx].tls ? 1 : 0;
             source = "discovered";
             have = true;
@@ -556,11 +559,15 @@ static void select_server(void)
                                                       chosen.port != s.server.port || chosen.tls != s.server.tls ||
                                                       strcmp(chosen.self, s.server.self) != 0));
     bool source_changed = strcmp(source, s.server_source) != 0;
+    bool by_self_changed = have && !changed && chosen.by_self != s.server.by_self;
     s.have_server = have;
     s.server = chosen;
     snprintf(s.server_source, sizeof(s.server_source), "%s", source);
     if (!changed && source_changed) {
         p_status_changed(NULL); /* same server, different provenance: refresh the snapshot */
+    }
+    if (by_self_changed) {
+        espos_sk_tok_event(&s.sm, ESPOS_SK_EV_SERVER, &chosen);
     }
     if (changed) {
         if (have) {
@@ -973,6 +980,7 @@ static char *status_json_from(const espos_sk_tok_status_t *st, const char *sourc
         /* The scheme actually in use, which under sk.scheme = auto is not
          * something the configuration can be read off. */
         cJSON_AddStringToObject(srv, "scheme", st->server.tls ? "https" : "http");
+        cJSON_AddBoolToObject(srv, "by_self", st->server.by_self);
         lock();
         for (size_t i = 0; i < s.server_count; i++) {
             if (strcmp(s.servers[i].host, st->server.host) == 0 && s.servers[i].port == st->server.port) {

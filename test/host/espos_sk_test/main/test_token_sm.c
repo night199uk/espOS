@@ -422,6 +422,93 @@ TEST_CASE("an old token learns its address on verify; a recorded one is not re-h
     TEST_ASSERT_EQUAL(0, F.saved.token_port);
 }
 
+TEST_CASE("a stand-in found by self cannot cost the token: 401 there waits for our server", "[sk_tok]")
+{
+    /* The real server restarts long enough for discovery to fall back to a
+     * twin advertising the same MMSI. The twin refuses our token, as it
+     * should; that used to clear the token and file a request on the twin. */
+    espos_sk_tok_store_t st = { .token = "tok.en.3", .token_self = "urn:mrn:signalk:uuid:aaaa", .token_host = "10.0.0.10", .token_port = 80 };
+    reset(&st);
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_START, NULL);
+    espos_sk_server_t twin = SRV_A;
+    strcpy(twin.host, "10.0.0.99");
+    twin.by_self = true;
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_SERVER, &twin);
+    TEST_ASSERT_EQUAL(1, F.verifies);
+    verify_result(401, NULL); /* plaintext: a second opinion first, as anywhere */
+    tick(5000);
+    TEST_ASSERT_EQUAL(2, F.verifies);
+    verify_result(401, NULL);
+    TEST_ASSERT_EQUAL(ESPOS_SK_TOK_ERROR, ST()->state);
+    TEST_ASSERT_EQUAL(0, F.requests);
+    TEST_ASSERT_EQUAL_STRING("tok.en.3", SM.store.token);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.10", SM.store.token_host);
+    /* the retry asks again, and is refused again, without giving up the token */
+    tick(60000);
+    TEST_ASSERT_EQUAL(3, F.verifies);
+    verify_result(401, NULL);
+    tick(5000);
+    verify_result(401, NULL);
+    TEST_ASSERT_EQUAL(0, F.requests);
+    TEST_ASSERT_EQUAL_STRING("tok.en.3", SM.store.token);
+    /* our server answers again and is chosen: the token still works */
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_SERVER, &SRV_A);
+    TEST_ASSERT_EQUAL_STRING("tok.en.3", F.last_verify_token);
+    verify_result(200, "urn:mrn:signalk:uuid:aaaa");
+    TEST_ASSERT_EQUAL(ESPOS_SK_TOK_APPROVED, ST()->state);
+    TEST_ASSERT_EQUAL(0, F.requests);
+}
+
+TEST_CASE("a stand-in found by self cannot cost the pending request: 404 there waits", "[sk_tok]")
+{
+    espos_sk_tok_store_t st = { .pending_href = "/signalk/v1/requests/abc", .pending_host = "10.0.0.10", .pending_port = 80, .pending_self = "urn:mrn:signalk:uuid:aaaa" };
+    reset(&st);
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_START, NULL);
+    espos_sk_server_t twin = SRV_A;
+    strcpy(twin.host, "10.0.0.99");
+    twin.by_self = true;
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_SERVER, &twin);
+    TEST_ASSERT_EQUAL(1, F.polls);
+    poll_result(404, NULL, NULL, NULL);
+    TEST_ASSERT_EQUAL(ESPOS_SK_TOK_ERROR, ST()->state);
+    TEST_ASSERT_EQUAL(0, F.requests);
+    TEST_ASSERT_EQUAL_STRING("/signalk/v1/requests/abc", SM.store.pending_href);
+    /* back on our server the approval is collected */
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_SERVER, &SRV_A);
+    TEST_ASSERT_EQUAL(2, F.polls);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.10", F.last_poll_srv.host);
+    poll_result(200, "COMPLETED", "APPROVED", "tok.en.9");
+    TEST_ASSERT_EQUAL_STRING("tok.en.9", SM.store.token);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.10", SM.store.token_host);
+}
+
+TEST_CASE("a server that stops being a stand-in is told so without a server change", "[sk_tok]")
+{
+    espos_sk_tok_store_t st = { .token = "tok.en.3", .token_self = "urn:mrn:signalk:uuid:aaaa", .token_host = "10.0.0.10", .token_port = 80 };
+    reset(&st);
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_START, NULL);
+    espos_sk_server_t moved = SRV_A;
+    strcpy(moved.host, "10.0.0.99");
+    moved.by_self = true;
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_SERVER, &moved);
+    verify_result(200, "urn:mrn:signalk:uuid:aaaa");
+    TEST_ASSERT_TRUE(ST()->server.by_self);
+    /* a 401 on another call there (the stream upgrade) is no verdict */
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_UNAUTHORIZED, NULL);
+    TEST_ASSERT_EQUAL(ESPOS_SK_TOK_APPROVED, ST()->state); /* the stream is not dropped over one */
+    tick(5000);
+    TEST_ASSERT_EQUAL(2, F.verifies);
+    verify_result(401, NULL);
+    TEST_ASSERT_EQUAL(0, F.requests);
+    TEST_ASSERT_EQUAL_STRING("tok.en.3", SM.store.token);
+    int n = F.notifies;
+    moved.by_self = false;
+    espos_sk_tok_event(&SM, ESPOS_SK_EV_SERVER, &moved);
+    TEST_ASSERT_FALSE(ST()->server.by_self);
+    TEST_ASSERT_GREATER_THAN(n, F.notifies);
+    TEST_ASSERT_EQUAL(2, F.verifies); /* same server: no new leg */
+}
+
 TEST_CASE("manual server without self: token verified, self learned and stored", "[sk_tok]")
 {
     espos_sk_tok_store_t st = { .token = "tok.en.4", .token_self = "" };

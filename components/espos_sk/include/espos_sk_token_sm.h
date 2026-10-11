@@ -77,6 +77,12 @@ typedef struct {
      * builds with CONFIG_ESPOS_SK_TLS; see docs/signalk.md. */
     bool tls;
     char self[ESPOS_SK_SELF_MAX];   /* vessel self URN if known (mDNS TXT / learned), else "" */
+    /* Chosen only for sharing the self URN of the server our token or pending
+     * request belongs to, while that one's address is silent (a restart, or a
+     * move). It may be our server at a new address or a twin with the same
+     * MMSI, so a refusal from it says nothing about the credential: the token
+     * and the pending request are kept, and nothing is requested from it. */
+    bool by_self;
 } espos_sk_server_t;
 
 typedef struct {
