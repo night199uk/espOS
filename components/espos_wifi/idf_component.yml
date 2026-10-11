@@ -3,7 +3,7 @@
 ## espos_wifi component manifest: registry metadata for signalk-espos/espos_wifi.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.16.1"
+version: "0.17.0"
 # x-release-please-end
 description: "Station + provisioning portal, a pure-C state machine, static IP, co-processor watchdog; reports into espos_net"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_wifi"
@@ -47,19 +47,19 @@ dependencies:
   # from the registry has no such directory and the field is ignored there.
   signalk-espos/espos_config:
     # x-release-please-start-version
-    version: "^0.16.1"
+    version: "^0.17.0"
     # x-release-please-end
     override_path: "../espos_config"
   signalk-espos/espos_httpd:
     # x-release-please-start-version
-    version: "^0.16.1"
+    version: "^0.17.0"
     # x-release-please-end
     override_path: "../espos_httpd"
   # The network seam the station reports into; it owns the hostname, the
   # device id and the mDNS responder (espressif/mdns is its dependency now).
   signalk-espos/espos_net:
     # x-release-please-start-version
-    version: "^0.16.1"
+    version: "^0.17.0"
     # x-release-please-end
     override_path: "../espos_net"
   # cJSON, exact-pinned like every other registry dependency here.
@@ -96,11 +96,11 @@ dependencies:
   # condition (espOS #164). No cycle: espos_health requires none of ours.
   signalk-espos/espos_health:
     # x-release-please-start-version
-    version: "^0.16.1"
+    version: "^0.17.0"
     # x-release-please-end
     override_path: "../espos_health"
   signalk-espos/espos_event:
     # x-release-please-start-version
-    version: "^0.16.1"
+    version: "^0.17.0"
     # x-release-please-end
     override_path: "../espos_event"

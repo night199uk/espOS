@@ -15,6 +15,17 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.17.0 (2026-10-11)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Added
+* feat(wifi): update the radio co-processor over its link by @dirkwa in https://github.com/signalk-espOS/espOS/pull/194
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.16.1...v0.17.0
+
 ## 0.16.1 (2026-10-10)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
