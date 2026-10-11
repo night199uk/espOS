@@ -22,6 +22,7 @@
 #include "esp_flash.h"
 #include "esp_heap_caps.h"
 #include "esp_mac.h"
+#include "esp_partition.h"
 #endif
 #include "esp_idf_version.h"
 #include "esp_log.h"
@@ -290,9 +291,31 @@ static void add_hardware(cJSON *j, const esp_chip_info_t *chip)
      * compare against another board's -- a P4 at 360 MHz next to a C6 at 160. */
     cJSON_AddNumberToObject(hw, "cpu_mhz", CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
 
+    /* The chip, not the build. esp_flash_get_size() returns the size the
+     * bootloader header was built for (CONFIG_ESPTOOLPY_FLASHSIZE), so a
+     * 32 MB panel running a 16 MB build read "16 MB" here. The physical size
+     * comes from the JEDEC ID; the configured one is only the fallback for a
+     * chip whose ID the driver cannot decode. */
     uint32_t flash = 0;
-    if (esp_flash_get_size(NULL, &flash) == ESP_OK) {
+    if (esp_flash_get_physical_size(NULL, &flash) == ESP_OK || esp_flash_get_size(NULL, &flash) == ESP_OK) {
         cJSON_AddNumberToObject(hw, "flash_bytes", (double)flash);
+    }
+
+    /* How much of it the partition table reaches: the end of the highest
+     * partition on the main chip. Next to flash_bytes it answers "is there
+     * room I am not using" -- the gap a larger partition table could claim
+     * with one USB flash, since OTA cannot rewrite the table. */
+    uint32_t partitioned = 0;
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+    for (; it; it = esp_partition_next(it)) {
+        const esp_partition_t *p = esp_partition_get(it);
+        if (p->flash_chip == esp_flash_default_chip && p->address + p->size > partitioned) {
+            partitioned = p->address + p->size;
+        }
+    }
+    esp_partition_iterator_release(it);
+    if (partitioned) {
+        cJSON_AddNumberToObject(hw, "flash_partitioned_bytes", (double)partitioned);
     }
 
     /* Totals, not free -- free heap is already reported and moves every

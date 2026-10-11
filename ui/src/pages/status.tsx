@@ -116,7 +116,16 @@ function HardwareCard({ i }: { i: SystemInfo | undefined }) {
       {hw.board && <Row k="Board">{hw.board}</Row>}
       {hw.mac && <Row k="MAC"><span class="mono">{hw.mac}</span></Row>}
       {hw.cpu_mhz !== undefined && <Row k="CPU">{hw.cpu_mhz} MHz</Row>}
-      {hw.flash_bytes !== undefined && <Row k="Flash">{fmtBytes(hw.flash_bytes)}</Row>}
+      {hw.flash_bytes !== undefined && (
+        <Row k="Flash">
+          {fmtBytes(hw.flash_bytes)}
+          {/* The chip next to what the partition table reaches: a 32 MB panel
+              running a 16 MB layout is room only a USB flash can claim. */}
+          {hw.flash_partitioned_bytes !== undefined && (
+            <span class="muted"> · {fmtBytes(hw.flash_partitioned_bytes)} partitioned</span>
+          )}
+        </Row>
+      )}
       {hw.ram_internal_bytes !== undefined && (
         <Row k="RAM">
           {fmtBytes(hw.ram_internal_bytes)} internal

@@ -142,7 +142,7 @@ export interface SystemInfo {
   /** Absent on a device older than the field; every member optional because
    *  each comes from a call that can fail independently. */
   hardware?: {
-    mac?: string; cpu_mhz?: number; flash_bytes?: number;
+    mac?: string; cpu_mhz?: number; flash_bytes?: number; flash_partitioned_bytes?: number;
     ram_internal_bytes?: number; ram_psram_bytes?: number;
     /** "wifi" | "ble" | "bt-classic" | "802.15.4" | "embedded-flash" | "embedded-psram" */
     features?: string[];

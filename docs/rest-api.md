@@ -193,6 +193,7 @@ already advertise.
   "schema_etag": "6acfba355e183b19", "ui_storage": true, "ui": "embedded",
   "hardware": {
     "mac": "60:55:f9:00:1a:2b", "cpu_mhz": 160, "flash_bytes": 8388608,
+    "flash_partitioned_bytes": 8323072,
     "ram_internal_bytes": 524288, "ram_psram_bytes": 0,
     "features": ["wifi", "ble", "802.15.4", "embedded-flash"],
     "board": "Espressif ESP32-C6-DevKitC-1"
@@ -216,7 +217,8 @@ one bench, so do not read `board` as derived from the chip:
 
 ```json
 "hardware": {
-  "mac": "30:ed:a0:e3:2b:e9", "cpu_mhz": 360, "flash_bytes": 16777216,
+  "mac": "30:ed:a0:e3:2b:e9", "cpu_mhz": 360, "flash_bytes": 33554432,
+  "flash_partitioned_bytes": 15794176,
   "board": "Waveshare ESP32-P4-WIFI6-Touch-LCD-X 7in",
   "coprocessor": {"version": "0.0.0", "host_version": "3.0.9",
                   "target": "esp32c6", "stale": true}
@@ -271,7 +273,8 @@ measurement:
 |---|---|
 | `mac` | the base MAC — the identity `espos_net` derives the short id and default hostname from |
 | `cpu_mhz` | what the build asked for (`CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ`), not a live reading |
-| `flash_bytes` | the flash chip's size |
+| `flash_bytes` | the flash chip's **physical** size, from its JEDEC ID (`esp_flash_get_physical_size()`), not the size the build was configured for. A 32 MB chip running a 16 MB build reports 32 MB. Falls back to the configured size only when the driver cannot decode the chip's ID |
+| `flash_partitioned_bytes` | where the partition table ends: the highest `address + size` of any partition on the main chip. Less than `flash_bytes` means flash the layout does not use; growing into it takes a new partition table, which only a USB flash can write (OTA cannot) |
 | `coprocessor` | **only on a host whose radio is a separate chip**, and only from the first co-processor heartbeat onwards (so: within about 20 s of boot, or never if `CONFIG_ESP_HOSTED_HOST_FEAT_HEARTBEAT` is off). Absence does not distinguish those cases from a board with no co-processor at all. A co-processor whose firmware never announced a version reads `"0.0.0"` — present, answering, silent about itself. See below |
 | `ram_internal_bytes`, `ram_psram_bytes` | **totals**, not free — `free_heap` above is the live number. `ram_psram_bytes: 0` means no PSRAM, which is what separates two boards with the same chip. |
 | `features` | `wifi`, `ble`, `bt-classic`, `802.15.4`, `embedded-flash`, `embedded-psram`, from `esp_chip_info()`'s bitmask |
