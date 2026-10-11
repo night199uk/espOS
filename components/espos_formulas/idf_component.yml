@@ -3,7 +3,7 @@
 ## espos_formulas component manifest: registry metadata for signalk-espos/espos_formulas.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.17.2"
+version: "0.17.3"
 # x-release-please-end
 description: "Marine arithmetic for Signal K devices: SI unit conversions, curve interpolation, dew point, heat index, resistive senders, battery state of charge"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_formulas"

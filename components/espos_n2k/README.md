@@ -3,7 +3,7 @@
 NMEA 2000 over TWAI: a candump TCP server, and an optional NMEA 2000 node (`CONFIG_ESPOS_N2K_NODE`) with address claim, instances and product information. The node's protocol layer is the vendored [NMEA2000](https://github.com/ttlappalainen/NMEA2000) library (MIT, `third_party/NMEA2000/`).
 
 ```sh
-idf.py add-dependency "signalk-espos/espos_n2k^0.17.2"  # x-release-please-version
+idf.py add-dependency "signalk-espos/espos_n2k^0.17.3"  # x-release-please-version
 ```
 
 Part of [espOS](https://github.com/signalk-espOS/espOS), an ESP-IDF runtime for Signal K devices. The components are released in lockstep, so one version of `espos_n2k` works with the same version of every other.
