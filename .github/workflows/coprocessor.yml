@@ -1,0 +1,178 @@
+name: Co-processor image
+
+# The ESP32-C6 radio image that an ESP32-P4 board installs over its SDIO link
+# (POST /api/v1/system/coprocessor/update, docs/hardware.md). The P4 firmware
+# accepts exactly one image: the one whose SHA-256 is pinned in
+# components/espos_wifi/src/coproc_image.h. So this workflow is what makes that pin
+# auditable: it rebuilds tools/coprocessor reproducibly on every change and
+# fails when the result is not byte-for-byte the pinned image.
+#
+# On main it also publishes the image to the coprocessor-assets branch, where
+# ESPOS_COPROC_FW_URL points, under a name carrying its version and
+# hash. A published file is never replaced: a device built against one hash
+# must keep finding that image.
+on:
+  pull_request:
+    paths:
+      - "tools/coprocessor/**"
+      - "components/espos_wifi/src/coproc_image.h"
+      - "components/espos_wifi/idf_component.yml"
+      - ".idf-version"
+      - ".github/workflows/coprocessor.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/coprocessor/**"
+      - "components/espos_wifi/src/coproc_image.h"
+      - "components/espos_wifi/idf_component.yml"
+      - ".idf-version"
+      - ".github/workflows/coprocessor.yml"
+  workflow_dispatch:
+
+# Pull requests only. On main every run must publish its image: GitHub keeps
+# one pending run per concurrency group and cancels it for a newer one, even
+# with cancel-in-progress off, so a group there could drop a pin's image for
+# good. The publish step retries its push instead.
+concurrency:
+  group: coprocessor-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and check the pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.pin.outputs.version }}
+      name: ${{ steps.pin.outputs.name }}
+    steps:
+      # The build fetches components from the registry; no token for them.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: read the pins
+        id: pin
+        run: |
+          set -euo pipefail
+          pins=components/espos_wifi/src/coproc_image.h
+          pin() { sed -n "s/^#define $1 *\"\(.*\)\"\$/\1/p" "$pins"; }
+          version=$(pin ESPOS_COPROC_FW_VERSION)
+          sha=$(pin ESPOS_COPROC_FW_SHA256)
+          # Checked by shape too: both go into later steps' scripts verbatim.
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$sha" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "::error::could not read the pins from $pins (version '$version', sha256 '$sha')"
+            exit 1
+          }
+          # The image, the host's esp_hosted and the version the P4 offers are
+          # one pair; a bump that misses one of the three is caught here.
+          # "|| true": a pin these cannot find is reported by the comparison
+          # below, not by pipefail ending the step without a word.
+          host=$(grep -A1 'espressif/esp_hosted:' components/espos_wifi/idf_component.yml | sed -n 's/.*version: "==\(.*\)".*/\1/p' || true)
+          image=$(grep -A1 'espressif/esp_hosted:' tools/coprocessor/main/idf_component.yml | sed -n 's/.*version: "==\(.*\)".*/\1/p' || true)
+          project=$(sed -n 's/^set(PROJECT_VER "\(.*\)")/\1/p' tools/coprocessor/CMakeLists.txt)
+          echo "coproc_image.h $version, host esp_hosted $host, image esp_hosted $image, PROJECT_VER $project"
+          for v in "$host" "$image" "$project"; do
+            [ "$v" = "$version" ] || { echo "::error::co-processor versions disagree: coproc_image.h $version, espos_wifi $host, image $image, PROJECT_VER $project"; exit 1; }
+          done
+          # Named by version AND hash: a rebuild with different bytes is a new
+          # file, so a published image is never replaced under a device built
+          # against it.
+          name="espos-coprocessor-esp32c6-$version-${sha:0:12}.bin"
+          # The URL is split across two string literals; both halves must be there.
+          if ! grep -qF "/esp32c6/$version/\"" "$pins" || ! grep -qF "\"$name\"" "$pins"; then
+            echo "::error::ESPOS_COPROC_FW_URL in $pins should end in esp32c6/$version/$name"
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "name=$name"
+            echo "sha=$sha"
+            echo "idf=$(cat .idf-version)"
+          } >> "$GITHUB_OUTPUT"
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ steps.pin.outputs.idf }}
+          target: esp32c6
+          path: tools/coprocessor
+          command: idf.py build
+      - name: compare with the pinned hash
+        run: |
+          set -euo pipefail
+          bin=tools/coprocessor/build/espos_coprocessor.bin
+          actual=$(sha256sum "$bin" | cut -d' ' -f1)
+          echo "built $(stat -c %s "$bin") bytes, sha256 $actual"
+          if [ "$actual" != "${{ steps.pin.outputs.sha }}" ]; then
+            echo "::error::the built image is not the pinned one: if this change is meant to produce a new image, set ESPOS_COPROC_FW_SHA256 to $actual and the file name in ESPOS_COPROC_FW_URL to end in -${actual:0:12}.bin (components/espos_wifi/src/coproc_image.h)"
+            exit 1
+          fi
+          mkdir -p out
+          cp "$bin" "out/${{ steps.pin.outputs.name }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.pin.outputs.name }}
+          path: out/
+          if-no-files-found: error
+
+  publish:
+    name: publish to coprocessor-assets
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.name }}
+          path: out
+      - name: commit the image unless it is already there
+        run: |
+          set -euo pipefail
+          version="${{ needs.build.outputs.version }}"
+          file="esp32c6/$version/${{ needs.build.outputs.name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch -q origin coprocessor-assets; then
+            git checkout -q -B coprocessor-assets FETCH_HEAD
+          else
+            git checkout -q --orphan coprocessor-assets
+            git rm -rq --cached . && git clean -fdq -e out
+          fi
+          if [ -e "$file" ]; then
+            if cmp -s "$file" "out/$(basename "$file")"; then
+              echo "$file is already published."
+              exit 0
+            fi
+            echo "::error::$file is published with different bytes, which its name (version and hash) should make impossible"
+            exit 1
+          fi
+          mkdir -p "$(dirname "$file")"
+          cp "out/$(basename "$file")" "$file"
+          git add "$file"
+          git commit -q -m "chore: publish co-processor image $version"
+          # Runs on main are not serialised (see concurrency above), so another
+          # one may have published first: the same file (then done) or a
+          # different one (names are unique, so rebase onto it and retry).
+          for attempt in 1 2 3 4 5; do
+            git push -q origin HEAD:coprocessor-assets && { echo "published $file"; exit 0; }
+            sleep $((attempt * 5))
+            git fetch -q origin coprocessor-assets || continue
+            if git cat-file -e "FETCH_HEAD:$file" 2>/dev/null; then
+              if git show "FETCH_HEAD:$file" | cmp -s - "out/$(basename "$file")"; then
+                echo "$file was published by another run."
+                exit 0
+              fi
+              echo "::error::$file is published with different bytes, which its name (version and hash) should make impossible"
+              exit 1
+            fi
+            git rebase -q FETCH_HEAD || { git rebase --abort; continue; }
+          done
+          echo "::error::could not push $file to coprocessor-assets"
+          exit 1

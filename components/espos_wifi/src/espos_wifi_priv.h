@@ -35,6 +35,12 @@ void espos_wifi_portal_credentials(char ssid[33], char psk[65]);
 
 /* HTTP endpoints (api_wifi.c). */
 esp_err_t espos_wifi_register_api(void);
+/* /api/v1/system/coprocessor/update (coproc_update.c); registers nothing on a
+ * build without a hosted co-processor. */
+esp_err_t espos_wifi_coproc_register_api(void);
+/* Suspend the co-processor heartbeat watchdog while an update keeps the link
+ * busy (hosted_watchdog.c); false re-arms it. A no-op without one. */
+void espos_wifi_hosted_watchdog_hold(bool hold);
 
 #ifdef __cplusplus
 }

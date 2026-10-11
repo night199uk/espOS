@@ -23,7 +23,7 @@ in this order, each winning over every later one:
 |---|---|
 | `power.mode` off → stay awake | the default: a freshly flashed device must learn its network and server first |
 | running image unconfirmed → stay awake | every wake from deep sleep is a boot, and the bootloader marks an image still pending verification as aborted. Sleeping before an update confirmed itself would roll it back at the next wake. espOS confirms an image once the network is up, and rolls it back itself after `ota.confirm_tmo_s` if it never gets there |
-| an update being checked, downloaded or installed → stay awake | a wake lasts seconds, and an update longer than that would be cut off on every wake and never finish. `espos_ota`'s own timeouts end a download that hangs. Needs `espos_ota` in the build |
+| an update being checked, downloaded or installed → stay awake | a wake lasts seconds, and an update longer than that would be cut off on every wake and never finish. `espos_ota`'s own timeouts end a download that hangs. Needs `espos_ota` in the build. A radio co-processor update (`/system/coprocessor/update`, [hardware.md](hardware.md#over-the-link)) counts too |
 | a boot that is not the cycle's timer wake, inside `power.window_s` → stay awake | after a power-on, an update or a crash the web UI and OTA are reachable. **Cutting the power always reopens this window** — it is the way back in |
 | past the wake's deadline → sleep | a network that never comes up must not drain the battery. The deadline is `power.awake_max_s` after a timer wake, and `window_s + awake_max_s` after any other boot |
 | network down → stay awake | |

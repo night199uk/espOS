@@ -62,7 +62,8 @@ typedef struct {
     bool enabled;           /* power.mode is cycle */
     bool timer_wake;        /* this boot is the cycle's own wake from deep sleep */
     bool image_unconfirmed; /* the running OTA image is still pending verification */
-    bool ota_busy;          /* an update is being checked, downloaded or installed */
+    bool ota_busy;          /* an update is being checked, downloaded or installed, or the radio
+                             * co-processor's firmware is being replaced */
     bool net_up;
     uint32_t net_up_for_ms; /* how long the network has been up; ignored when it is not */
     bool have_stream;       /* SignalK is built and streaming is enabled: wait for it */

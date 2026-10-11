@@ -134,6 +134,12 @@ esp_err_t espos_wifi_hosted_watchdog_start(void);
  * "radio link is gone" line in the log ring. Kept for API uniformity. */
 uint32_t espos_wifi_hosted_recoveries(void);
 
+/* True while a radio co-processor update (POST
+ * /api/v1/system/coprocessor/update) runs. It ends in a restart, so a host
+ * firmware update must not start meanwhile; espos_ota checks this. Always
+ * false on a build without a hosted co-processor. */
+bool espos_wifi_coproc_busy(void);
+
 #ifdef __cplusplus
 }
 #endif

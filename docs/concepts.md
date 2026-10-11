@@ -49,6 +49,13 @@ function that `espos_time` overrides when it is in the build, so a firmware
 without the component behaves exactly as it did before and neither names the
 other.
 
+Firmware updates are tied together the same way. A host OTA (`espos_ota`) and
+a radio co-processor update (`espos_wifi`, [hardware.md](hardware.md#over-the-link))
+each end in a restart, so neither starts while the other runs; each declares
+the other's busy check weak (`espos_ota_busy()`, `espos_wifi_coproc_busy()`)
+rather than depending on it, and `espos_power` reads both to stay awake through
+either.
+
 ## espos_start(): the order and why
 
 ```c

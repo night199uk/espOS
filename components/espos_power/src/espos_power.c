@@ -41,6 +41,11 @@
 
 static const char *TAG = "espos_power";
 
+/* espos_wifi is optional here and needs nothing from us: a weak reference,
+ * NULL when it is not linked. A radio co-processor update is a firmware
+ * transfer like an OTA, and a sleep in the middle of it cuts it short. */
+extern bool espos_wifi_coproc_busy(void) __attribute__((weak));
+
 #define TICK_MS 200
 /* After espos_sk_flush(): every message is handed to the socket, which is not
  * the same as on the wire. On a live link lwIP sends within a few ms. */
@@ -171,9 +176,11 @@ static void power_task(void *arg)
             .enabled = s.enabled && !s.sim_slept,
             .timer_wake = s.timer_wake,
             .image_unconfirmed = s.unconfirmed,
+            .ota_busy =
 #if ESPOS_POWER_HAVE_OTA
-            .ota_busy = espos_ota_busy(),
+                espos_ota_busy() ||
 #endif
+                (espos_wifi_coproc_busy && espos_wifi_coproc_busy()),
             .net_up = up,
             .net_up_for_ms = up ? now - s.net_up_since_ms : 0,
             .have_stream = have_stream,

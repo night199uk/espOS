@@ -97,5 +97,5 @@ esp_err_t espos_wifi_register_api(void)
             return err;
         }
     }
-    return ESP_OK;
+    return espos_wifi_coproc_register_api();
 }

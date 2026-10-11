@@ -44,7 +44,9 @@ const char *espos_ota_state_name(espos_ota_state_t s);
 
 /** Fetch the manifest now (async; result in status / SSE "ota"). */
 esp_err_t espos_ota_check_now(void);
-/** Install from an explicit URL (async). ESP_ERR_INVALID_STATE while busy. */
+/** Install from an explicit URL (async). ESP_ERR_INVALID_STATE while busy,
+ * ESP_ERR_NOT_FINISHED while a radio co-processor update runs (also for
+ * espos_ota_install_available() and espos_ota_rollback()). */
 esp_err_t espos_ota_install_url(const char *url);
 /** Install the build found by the last check. ESP_ERR_NOT_FOUND if none. */
 esp_err_t espos_ota_install_available(void);
@@ -55,10 +57,11 @@ esp_err_t espos_ota_rollback(void);
 
 /**
  * True while an update is under way: a manifest check, a download, the
- * verification or the reboot after it -- or a request queued for the OTA task
- * that it has not taken yet, because POST /api/v1/ota answers before the task
- * does. For code that must not sleep or cut the power in the middle of one
- * (espos_power). False before espos_ota_start(). Safe from any task.
+ * verification or the reboot after it, a rollback until its reboot -- or a
+ * request queued for the OTA task that it has not taken yet, because
+ * POST /api/v1/ota answers before the task does. For code that must not sleep
+ * or cut the power in the middle of one (espos_power). False before
+ * espos_ota_start(). Safe from any task.
  */
 bool espos_ota_busy(void);
 

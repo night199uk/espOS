@@ -47,6 +47,7 @@
 #include "espos_health.h"
 #include "espos_httpd.h" /* espos_httpd_coproc_t, and the hook we define below */
 #include "espos_wifi.h"
+#include "espos_wifi_priv.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -97,16 +98,27 @@ static const char *TAG = "espos_hostedwd";
 static esp_timer_handle_t s_timer;
 static uint32_t s_last_beat;
 static bool s_seen_beat;
+/* Set by a co-processor update (coproc_update.c) for as long as it keeps the
+ * link busy. Written on that task and read on the event loop, on either core:
+ * see arm_timer() for the race between the two. */
+static volatile bool s_held;
 
 static void arm_timer(void)
 {
-    if (!s_timer) {
+    if (!s_timer || s_held) {
         return;
     }
     if (esp_timer_is_active(s_timer)) {
         esp_timer_restart(s_timer, TIMEOUT_US);
     } else {
         esp_timer_start_once(s_timer, TIMEOUT_US);
+    }
+    /* A hold taken between the check above and the arm stopped a timer this
+     * then started again, and later beats return early without touching it,
+     * so it would fire mid-update. Checked again after arming; the hold sets
+     * the flag before it stops the timer, so one side always sees the other. */
+    if (s_held) {
+        esp_timer_stop(s_timer);
     }
 }
 
@@ -469,6 +481,19 @@ static void on_hosted_event(void *arg, esp_event_base_t base, int32_t id, void *
     }
 }
 
+void espos_wifi_hosted_watchdog_hold(bool hold)
+{
+    s_held = hold;
+    if (!s_timer) {
+        return;
+    }
+    if (hold) {
+        esp_timer_stop(s_timer); /* ESP_ERR_INVALID_STATE when idle: harmless */
+    } else {
+        arm_timer();
+    }
+}
+
 esp_err_t espos_wifi_hosted_watchdog_start(void)
 {
     if (s_timer) {
@@ -558,8 +583,10 @@ uint32_t espos_wifi_hosted_recoveries(void)
 /* Native-radio and simulator builds: the API exists so callers never
  * need an #ifdef, but there is no co-processor to watch. */
 #include "espos_wifi.h"
+#include "espos_wifi_priv.h"
 
 esp_err_t espos_wifi_hosted_watchdog_start(void) { return ESP_ERR_NOT_SUPPORTED; }
+void espos_wifi_hosted_watchdog_hold(bool hold) { (void)hold; }
 uint32_t espos_wifi_hosted_recoveries(void) { return 0; }
 /* No co-processor on this target, so no override: espos_httpd's weak stub
  * answers false and the document carries no "coprocessor" object. Deliberately

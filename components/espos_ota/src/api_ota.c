@@ -29,6 +29,12 @@ static esp_err_t reply(httpd_req_t *req, esp_err_t err, const char *word)
     if (err == ESP_ERR_INVALID_STATE) {
         return espos_httpd_send_error(req, "409 Conflict", "busy", "an update or check is in progress");
     }
+    if (err == ESP_ERR_NOT_FINISHED) {
+        /* Its own code: a client that adopts a running update on "busy"
+         * would otherwise take this for one. */
+        return espos_httpd_send_error(req, "409 Conflict", "coprocessor_busy",
+                                      "a radio co-processor update is running; retry after it");
+    }
     if (err == ESP_ERR_NOT_FOUND) {
         return espos_httpd_send_error(req, "404 Not Found", "not_found", "no update known; check first");
     }

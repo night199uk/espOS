@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 Dirk Wahrheit
+# SPDX-License-Identifier: Apache-2.0
+# Exact, like espos_wifi's host-side pin: the image and the host it serves
+# are one pair, and ESPOS_COPROC_FW_SHA256 (components/espos_wifi/src/
+# coproc_image.h) is the hash of THIS build. Bumping it means bumping all
+# four together; the coprocessor workflow checks they agree.
+dependencies:
+  idf:
+    version: ">=6.0"
+  espressif/esp_hosted:
+    version: "==3.0.9"

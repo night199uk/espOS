@@ -67,6 +67,7 @@ static struct {
     uint32_t next_check_at;
     bool ever_connected;
     bool confirmed_this_boot;
+    bool rolling_back;      /* from the rollback's check until its reboot */
     char key_fp[17];        /* "" until known, or when the image has no signature block */
     bool key_fp_done;       /* OTA task only */
     /* config snapshot */
@@ -304,6 +305,17 @@ static void do_check(void)
     }
 }
 
+/* espos_wifi is optional here (and requires nothing from us), so a weak
+ * reference: NULL when it is not linked. */
+extern bool espos_wifi_coproc_busy(void) __attribute__((weak));
+
+/* A radio co-processor update ends in a restart, which would cut an install
+ * short or land a rollback mid-flash. */
+static bool coproc_busy(void)
+{
+    return espos_wifi_coproc_busy && espos_wifi_coproc_busy();
+}
+
 static void do_install(const char *url)
 {
     bool insecure;
@@ -314,7 +326,15 @@ static void do_install(const char *url)
     s.received = 0;
     s.total = 0;
     unlock();
+    /* Claimed before the check: espos_wifi claims its update before checking
+     * espos_ota_busy(), so two racing starts cannot both miss each other.
+     * Checked here too because auto_install queues straight onto the task,
+     * past send_cmd(). */
     set_state(ESPOS_OTA_DOWNLOADING, NULL);
+    if (coproc_busy()) {
+        set_state(ESPOS_OTA_FAILED, "a radio co-processor update is running");
+        return;
+    }
     char err_text[96] = "";
     espos_ota_quiesce_hook();
     esp_err_t err = espos_ota_port_install(url, insecure, info.project, progress_cb, NULL, err_text, sizeof(err_text));
@@ -426,9 +446,28 @@ static void ota_task(void *arg)
                 publish();
                 break;
             case CMD_ROLLBACK:
+                /* Claimed before the check, as do_install claims its state.
+                 * The state a rollback reports is FAILED, which
+                 * espos_ota_busy() does not count, so the claim is its own
+                 * flag, held until the reboot. */
+                lock();
+                s.rolling_back = true;
+                unlock();
+                if (coproc_busy()) {
+                    lock();
+                    s.rolling_back = false;
+                    unlock();
+                    set_state(ESPOS_OTA_FAILED, "a radio co-processor update is running");
+                    break;
+                }
                 ESP_LOGW(TAG, "rollback requested");
                 set_state(ESPOS_OTA_FAILED, "rollback requested");
                 espos_ota_port_mark_invalid_and_reboot();
+                /* Back here only without an image to roll back to, or on the
+                 * host simulator. */
+                lock();
+                s.rolling_back = false;
+                unlock();
                 break;
             case CMD_STOP:
                 s.task = NULL;
@@ -517,6 +556,9 @@ static esp_err_t send_cmd(int cmd, const char *url)
     if (!s.q) {
         return ESP_ERR_INVALID_STATE;
     }
+    if ((cmd == CMD_INSTALL_URL || cmd == CMD_INSTALL_AVAIL || cmd == CMD_ROLLBACK) && coproc_busy()) {
+        return ESP_ERR_NOT_FINISHED;
+    }
     lock();
     bool busy = s.state == ESPOS_OTA_CHECKING || s.state == ESPOS_OTA_DOWNLOADING || s.state == ESPOS_OTA_VERIFYING || s.state == ESPOS_OTA_READY;
     unlock();
@@ -571,7 +613,7 @@ bool espos_ota_busy(void)
     }
     lock();
     bool busy = s.state == ESPOS_OTA_CHECKING || s.state == ESPOS_OTA_DOWNLOADING || s.state == ESPOS_OTA_VERIFYING ||
-                s.state == ESPOS_OTA_READY;
+                s.state == ESPOS_OTA_READY || s.rolling_back;
     unlock();
     /* The task polls its queue once a second, and POST /ota has answered 202
      * by then: a request still waiting in the queue is an update too. */
