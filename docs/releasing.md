@@ -21,7 +21,8 @@ carries a change users get, and keeps one pull request open,
   edited: `feat` → Added, `fix` and `revert` → Fixed, `perf` and
   `refactor` → Changed, while `docs`, `build`, `ci`, `test` and `chore` stay
   out. A breaking change goes under Breaking changes whatever its type. A
-  label set by hand holds until the next such edit;
+  label set by hand holds until the next such edit. A pull request from a
+  fork is not labelled (its token is read-only), so label it by hand;
 * bumps `version.txt` and every espOS version in the component manifests
   (below);
 * picks the version from the same titles, because pull requests are
