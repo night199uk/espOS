@@ -40,8 +40,8 @@ already set.
 
 ## Web UI
 
-`components/espos_httpd/ui-dist/` — the gzipped Vite bundle the firmware packs into the LittleFS
-`storage` image (`build/storage.bin`, flashed by `idf.py flash`) — is
+`components/espos_httpd/ui-dist/` — the gzipped Vite bundle the firmware builds into its app
+image, and packs into the LittleFS `storage` image (`build/storage.bin`) — is
 committed. Building a firmware therefore needs no Node. The bundle is absent
 only in a damaged checkout, and the configure stops with an error then rather
 than ship the placeholder page.

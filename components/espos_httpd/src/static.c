@@ -2,12 +2,15 @@
  * SPDX-FileCopyrightText: 2026 Dirk Wahrheit
  * SPDX-License-Identifier: Apache-2.0
  *
- * Static UI. Files come from the LittleFS "storage" partition (mounted at
- * CONFIG_ESPOS_HTTPD_WWW_DIR); the build gzips the Vite bundle into it, so
- * `<path>.gz` is tried first and sent with Content-Encoding: gzip. Unknown
- * extension-less paths fall back to index.html (SPA routes). When the
- * partition has no index.html the placeholder page embedded in the binary
- * is served instead, so a device is never without a setup page.
+ * Static UI. The gzipped Vite bundle is built into the app image
+ * (ui_bundle.h, CONFIG_ESPOS_HTTPD_UI_EMBED) and served from there, so an OTA
+ * update brings the UI that matches its firmware. The LittleFS "storage"
+ * partition (mounted at CONFIG_ESPOS_HTTPD_WWW_DIR) comes first only for a
+ * custom UI packed into it (ESPOS_HTTPD_UI_FROM_STORAGE), and otherwise
+ * answers what the built-in bundle does not have. There `<path>.gz` is tried
+ * first and sent with Content-Encoding: gzip. Unknown extension-less paths
+ * fall back to index.html (SPA routes). With neither, the placeholder page
+ * embedded in the binary is served, so a device is never without a setup page.
  *
  * Wired in as the 404 fallback for GET (see espos_httpd.c) so API handlers
  * registered later by other components are never shadowed by a wildcard.
@@ -25,6 +28,7 @@
 
 #include "espos_httpd.h"
 #include "espos_httpd_priv.h"
+#include "ui_bundle.h"
 
 #if !CONFIG_IDF_TARGET_LINUX
 static const char *TAG = "espos_httpd";
@@ -35,6 +39,13 @@ extern const char index_html_end[] asm("_binary_index_html_end");
 
 static char s_www[64] = CONFIG_ESPOS_HTTPD_WWW_DIR;
 static bool s_mounted;
+/* The storage partition is the UI, not the built-in bundle: a project packed
+ * its own UI into it, or (host tests) ESPOS_WWW_DIR names one. */
+#ifdef ESPOS_HTTPD_UI_FROM_STORAGE
+static bool s_storage_first = true;
+#else
+static bool s_storage_first;
+#endif
 
 static const struct {
     const char *ext;
@@ -75,6 +86,35 @@ static esp_err_t send_embedded_index(httpd_req_t *req)
     return httpd_resp_send(req, index_html_start, index_html_end - index_html_start - 1);
 }
 
+static const espos_ui_file_t *embedded_find(const char *logical)
+{
+    if (s_storage_first) {
+        return NULL;
+    }
+    for (size_t i = 0; i < espos_ui_file_count; i++) {
+        if (strcmp(espos_ui_files[i].path, logical) == 0) {
+            return &espos_ui_files[i];
+        }
+    }
+    return NULL;
+}
+
+static void set_cache(httpd_req_t *req, const char *logical)
+{
+    /* Vite hashes everything under /assets/: cache forever. The rest can change with the next upload. */
+    httpd_resp_set_hdr(req, "Cache-Control", strncmp(logical, "/assets/", 8) == 0 ? "public, max-age=31536000, immutable" : "no-cache");
+}
+
+static esp_err_t send_embedded(httpd_req_t *req, const espos_ui_file_t *f)
+{
+    httpd_resp_set_type(req, content_type(f->path));
+    if (f->gz) {
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    }
+    set_cache(req, f->path);
+    return httpd_resp_send(req, (const char *)f->start, f->end - f->start);
+}
+
 /* Send <fs path> (already known to exist). */
 static esp_err_t send_file(httpd_req_t *req, const char *fs_path, const char *logical, bool gz)
 {
@@ -86,8 +126,7 @@ static esp_err_t send_file(httpd_req_t *req, const char *fs_path, const char *lo
     if (gz) {
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     }
-    /* Vite hashes everything under /assets/: cache forever. The rest can change with the next upload. */
-    httpd_resp_set_hdr(req, "Cache-Control", strncmp(logical, "/assets/", 8) == 0 ? "public, max-age=31536000, immutable" : "no-cache");
+    set_cache(req, logical);
     char *buf = malloc(2048);
     if (!buf) {
         fclose(f);
@@ -141,6 +180,10 @@ esp_err_t espos_httpd_static_serve(httpd_req_t *req)
     if (logical[n - 1] == '/') {
         strlcat(logical, "index.html", sizeof(logical));
     }
+    const espos_ui_file_t *e = embedded_find(logical);
+    if (e) {
+        return send_embedded(req, e);
+    }
     char fs_path[256];
     bool gz = false;
     if (resolve(logical, fs_path, sizeof(fs_path), &gz)) {
@@ -150,6 +193,10 @@ esp_err_t espos_httpd_static_serve(httpd_req_t *req)
     const char *last = strrchr(logical, '/');
     bool routeish = last && !strchr(last, '.');
     if (routeish || strcmp(logical, "/index.html") == 0) {
+        e = embedded_find("/index.html");
+        if (e) {
+            return send_embedded(req, e);
+        }
         if (resolve("/index.html", fs_path, sizeof(fs_path), &gz)) {
             return send_file(req, fs_path, "/index.html", gz);
         }
@@ -168,6 +215,14 @@ bool espos_httpd_static_mounted(void)
     return s_mounted;
 }
 
+const char *espos_httpd_ui_source(void)
+{
+    if (embedded_find("/index.html")) {
+        return "embedded";
+    }
+    return s_mounted ? "storage" : "placeholder";
+}
+
 esp_err_t espos_httpd_register_static(void)
 {
 #if CONFIG_IDF_TARGET_LINUX
@@ -176,6 +231,7 @@ esp_err_t espos_httpd_register_static(void)
     if (dir && *dir) {
         strlcpy(s_www, dir, sizeof(s_www));
         s_mounted = true;
+        s_storage_first = true;
     }
 #else
     esp_vfs_littlefs_conf_t conf = {
@@ -202,13 +258,16 @@ esp_err_t espos_httpd_register_static(void)
         if (have_index) {
             ESP_LOGI(TAG, "ui storage mounted at %s (%u/%u KiB used)", s_www, (unsigned)(used / 1024), (unsigned)(total / 1024));
             s_mounted = true;
-        } else {
+        } else if (!embedded_find("/index.html")) {
             ESP_LOGW(TAG, "ui storage at %s has no index.html: serving the embedded page "
                           "(build the UI: cd ui && npm ci && npm run build)",
                      s_www);
         }
-    } else {
+    } else if (!embedded_find("/index.html")) {
         ESP_LOGW(TAG, "ui storage not mounted (%s): serving the embedded page", esp_err_to_name(err));
+    }
+    if (embedded_find("/index.html")) {
+        ESP_LOGI(TAG, "serving the web UI built into the firmware (%u files)", (unsigned)espos_ui_file_count);
     }
 #endif
     /* The UI is public: the login page is part of it. (The 404 fallback that

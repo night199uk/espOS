@@ -1,7 +1,7 @@
 # Web UI (`ui/`) — M5
 
-A Preact + TypeScript single-page app built with Vite, served by
-`espos_httpd` from the LittleFS `storage` partition. It talks only to the
+A Preact + TypeScript single-page app built with Vite, built into the
+firmware image and served by `espos_httpd`. It talks only to the
 versioned REST API in [rest-api.md](rest-api.md) and gets live state over the SSE
 stream — no polling, no coupling to firmware internals.
 
@@ -69,11 +69,18 @@ docs together.
 
 `npm run build` type-checks (strict, `noUncheckedIndexedAccess`), bundles
 (~18 KiB gzipped in total) and writes `components/espos_httpd/ui-dist/` — every file gzipped as
-`<name>.gz`, nothing else. The root `CMakeLists.txt` turns `components/espos_httpd/ui-dist`
-into `build/storage.bin` (`littlefs_create_partition_image`,
-`FLASH_IN_PROJECT`), so `idf.py flash` writes it. Without a UI build the
-firmware still builds and serves the embedded placeholder page (`GET
-/system/info` → `ui_storage`, and the boot log says so).
+`<name>.gz`, nothing else. `espos_httpd` embeds every file of
+`components/espos_httpd/ui-dist` in the app image (`target_add_binary_data`,
+`CONFIG_ESPOS_HTTPD_UI_EMBED`, about 25 KiB), so an OTA update brings the
+page that matches the firmware. The LittleFS `storage` partition is written
+by `idf.py flash` only, never by OTA: a page served from it stays the one
+flashed over USB however many updates follow, and a page older than the
+API it talks to misbehaves in ways that look like firmware bugs.
+`espos_project_ui_partition()` still packs the bundle into
+`build/storage.bin`; a project that gives it its own `DIR` (a firmware with
+its own pages) is served from storage, and that bundle is updated by USB
+flash only. `GET /system/info` → `ui` says which source is served
+(`embedded`, `storage` or `placeholder`), and the boot log says so too.
 
 ## Serving rules (firmware side)
 

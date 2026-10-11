@@ -138,7 +138,7 @@ export interface SkStatus {
 export interface SystemInfo {
   app: string; version: string; idf_version: string; chip: string; chip_revision: number; cores: number;
   uptime_s: number; free_heap: number; min_free_heap: number; reset_reason: string; config_storage_reset: boolean;
-  schema_etag: string; ui_storage?: boolean;
+  schema_etag: string; ui_storage?: boolean; ui?: "embedded" | "storage" | "placeholder";
   /** Absent on a device older than the field; every member optional because
    *  each comes from a call that can fail independently. */
   hardware?: {

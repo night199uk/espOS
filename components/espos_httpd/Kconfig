@@ -53,12 +53,25 @@ menu "espOS HTTP server"
         default 15
         range 5 120
 
+    config ESPOS_HTTPD_UI_EMBED
+        bool "Build the web UI into the firmware image"
+        default y
+        help
+            Embed the gzipped UI bundle (ui-dist/, about 25 KiB) in the app
+            image and serve it from there. An OTA update writes only the app
+            slot, never the "storage" partition, so a UI served from storage
+            stays at whatever version was flashed over USB while the firmware
+            moves on; one built into the app moves with it. A custom UI
+            (espos_project_ui_partition(DIR ...)) is still served from storage.
+
     config ESPOS_HTTPD_WWW_DIR
         string "Mount point of the UI storage partition"
         default "/www"
         help
-            The LittleFS "storage" partition holding the gzipped UI bundle
-            is mounted here and served at /.
+            The LittleFS "storage" partition is mounted here. It is served at
+            / when the UI is not built in (ESPOS_HTTPD_UI_EMBED off) or the
+            project packs a custom UI into it, and for files the built-in
+            bundle does not have.
 
     config ESPOS_HTTPD_DEBUG_CRASH
         bool "Expose POST /api/v1/system/crash (deliberate panic, for testing core dumps)"
