@@ -40,8 +40,18 @@ whose `reset_reason` and `last_reset` say why the device last restarted.
   genuinely carries a `version.txt` that was never bumped to match its tag.
   A device would report whichever the build preferred. Check the pinned commit.
 
-**The device serves a placeholder page instead of the web UI** (`ui_storage: false` in `/system/info`; boot log `ui storage … has no index.html: serving the embedded page`)
-: The LittleFS `storage` partition has no bundle. Either the project never
+**The web page still behaves like an older release after an OTA update** (`ui` missing from `/system/info`, or `ui: "storage"`)
+: Firmware before the page was built into the image served it from the
+  LittleFS `storage` partition, which OTA never writes, so the page stayed
+  the one flashed over USB. Update to a firmware whose `/system/info` reports
+  `ui: "embedded"` and reload the page (Ctrl/Cmd-Shift-R). A project with its
+  own `DIR` bundle is still served from storage; reflash it over USB with
+  `idf.py flash`. [Web UI](ui.md).
+
+**The device serves a placeholder page instead of the web UI** (`ui: "placeholder"` in `/system/info`; boot log `ui storage … has no index.html: serving the embedded page`)
+: There is no bundle in the image or in storage. With
+  `CONFIG_ESPOS_HTTPD_UI_EMBED` off, or a custom `DIR`, the page comes from
+  the LittleFS `storage` partition, and it has none. Either the project never
   called `espos_project_ui_partition()` after `project()`, or a custom `DIR`
   was given and is missing (that is a CMake *warning*, not an error), or the
   image was written with `idf.py app-flash`, which skips `storage.bin` —

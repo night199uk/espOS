@@ -11,6 +11,8 @@ esp_err_t espos_httpd_register_system_api(void);
 esp_err_t espos_httpd_register_static(void);
 esp_err_t espos_httpd_static_serve(httpd_req_t *req);
 bool espos_httpd_static_mounted(void);
+/* Where GET / comes from: "embedded" (built into the app), "storage" or "placeholder". */
+const char *espos_httpd_ui_source(void);
 esp_err_t espos_httpd_register_logs_api(void);
 esp_err_t espos_httpd_register_coredump_api(void);
 esp_err_t espos_httpd_register_health_api(void);

@@ -190,7 +190,7 @@ already advertise.
   "uptime_s": 42, "free_heap": 210000, "min_free_heap": 190000,
   "free_internal": 148000, "min_internal_free": 121000,
   "reset_reason": "software", "config_storage_reset": false,
-  "schema_etag": "6acfba355e183b19", "ui_storage": true,
+  "schema_etag": "6acfba355e183b19", "ui_storage": true, "ui": "embedded",
   "hardware": {
     "mac": "60:55:f9:00:1a:2b", "cpu_mhz": 160, "flash_bytes": 8388608,
     "ram_internal_bytes": 524288, "ram_psram_bytes": 0,
@@ -325,7 +325,10 @@ is `MALLOC_CAP_DEFAULT`, so it counts PSRAM too, and megabytes free there say no
 about whether internal RAM ever came back. `free_internal` and `min_internal_free` are
 the same measurements `espos_health` compares, not similar ones.
 
-`ui_storage` (M5) is true when the LittleFS UI partition is mounted.
+`ui_storage` (M5) is true when the LittleFS UI partition is mounted. `ui`
+says where the page this device serves comes from: `embedded` (the bundle
+built into the firmware image, the default), `storage` (a project's own
+bundle from the LittleFS partition) or `placeholder` (neither).
 `config_storage_reset` is true when the NVS partition had to be erased at
 boot (corrupt/incompatible) and every value is a default.
 `reset_reason` ∈ `poweron external software panic int_wdt task_wdt wdt
@@ -454,16 +457,17 @@ persisted.
 
 ## Static UI — M5 — public
 
-Everything that is not `/api/…` is served from the LittleFS `storage`
-partition (the gzipped Vite bundle, see [ui.md](ui.md)): `<path>.gz` is
+Everything that is not `/api/…` is the web UI (the gzipped Vite bundle, see
+[ui.md](ui.md)), served from the firmware image or, for a project with its
+own bundle, from the LittleFS `storage` partition: `<path>.gz` is
 preferred and sent with `Content-Encoding: gzip` (`curl --compressed`),
 `/assets/*` (content-hashed) with `Cache-Control: public, max-age=31536000,
 immutable`, everything else `no-cache`. An extension-less path that does
 not exist falls back to `/index.html` (SPA routes such as `/wifi`); a
 missing file with an extension is `404 {"error": "not_found"}`, as is
-anything unknown under `/api/`. When the partition has no `index.html` the
-placeholder page embedded in the firmware is served instead
-(`ui_storage: false` in `/system/info`).
+anything unknown under `/api/`. When there is no bundle at all the
+placeholder page is served instead (`ui: "placeholder"` in
+`/system/info`).
 
 
 ## Network

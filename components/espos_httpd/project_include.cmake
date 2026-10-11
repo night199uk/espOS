@@ -23,6 +23,9 @@
 # espos_project_ui_partition([PARTITION <name>] [DIR <dir>] [NAME <label>])
 #
 # Pack the espOS web UI into a LittleFS image flashed with `idf.py flash`.
+# The default bundle is also built into the app image and served from there
+# (CONFIG_ESPOS_HTTPD_UI_EMBED), because OTA never rewrites this partition;
+# a custom DIR is served from the partition instead.
 # Call AFTER project() -- littlefs_create_partition_image comes from the
 # managed component. Default DIR is the bundle committed in this component, so
 # a firmware build never needs Node; `npm run build` in <espos>/ui regenerates
@@ -52,6 +55,12 @@ function(espos_project_ui_partition)
     if(EXISTS "${_UI_DIR}/index.html.gz")
         littlefs_create_partition_image(${_UI_PARTITION} "${_UI_DIR}" FLASH_IN_PROJECT)
         message(STATUS "${_UI_NAME}: UI bundle from ${_UI_DIR} will be flashed to '${_UI_PARTITION}'")
+        if(NOT _UI_DIR STREQUAL _UI_DEFAULT_DIR)
+            # A custom UI lives only in the partition: serve it ahead of the
+            # espOS bundle built into the app.
+            idf_component_get_property(_ui_lib espos_httpd COMPONENT_LIB)
+            target_compile_definitions(${_ui_lib} PRIVATE ESPOS_HTTPD_UI_FROM_STORAGE=1)
+        endif()
     elseif(_UI_DIR STREQUAL _UI_DEFAULT_DIR)
         # The default bundle ships with the component; its absence is a damaged
         # checkout or a truncated package, not a skipped build step, and a

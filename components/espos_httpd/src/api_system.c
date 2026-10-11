@@ -387,6 +387,7 @@ static esp_err_t info_get(httpd_req_t *req)
     espos_config_schema_etag(schema_etag);
     cJSON_AddStringToObject(j, "schema_etag", schema_etag);
     cJSON_AddBoolToObject(j, "ui_storage", espos_httpd_static_mounted());
+    cJSON_AddStringToObject(j, "ui", espos_httpd_ui_source());
     add_time(j);
     add_last_reset(j);
     char *body = cJSON_PrintUnformatted(j);
