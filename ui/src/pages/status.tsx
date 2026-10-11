@@ -81,7 +81,7 @@ export function StatusPage() {
               <TimeRow t={(i as SystemInfo & { time?: TimeInfo }).time} />
               <Row k="Free heap">{fmtBytes(i.free_heap)} <span class="muted">min {fmtBytes(i.min_free_heap)}</span></Row>
               {i.config_storage_reset && <Msg text="Config storage was reset at boot — all values are defaults." kind="warn" />}
-              {i.ui_storage === false && <Msg text="UI storage partition not mounted; serving the embedded page." kind="warn" />}
+              {(i.ui ? i.ui === "placeholder" : i.ui_storage === false) && <Msg text="No web UI in the firmware or the storage partition; serving the placeholder page." kind="warn" />}
               <div class="row" style="margin-top:.75rem">
                 <button onClick={reboot}>Reboot</button>
                 <button class="danger" onClick={factoryReset}>Factory reset…</button>

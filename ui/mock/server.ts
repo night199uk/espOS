@@ -478,7 +478,7 @@ export function startMock(port = 8484): http.Server {
           // IS guaranteed (a region's minimum cannot exceed its current free size),
           // so free_internal stays above min_internal_free here.
           free_internal: 181000 + Math.round(Math.random() * 2000), min_internal_free: 176000,
-          reset_reason: "software", config_storage_reset: false, schema_etag: etag, ui_storage: true,
+          reset_reason: "software", config_storage_reset: false, schema_etag: etag, ui_storage: true, ui: "embedded",
           // A board that declared itself, so the Board row is exercised; a C6
           // has no PSRAM, which is the "no PSRAM" branch rather than a missing
           // one. Both are states a happy-path mock would never show.
