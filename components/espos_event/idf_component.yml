@@ -3,7 +3,7 @@
 ## espos_event component manifest: registry metadata for signalk-espos/espos_event.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.17.0"
+version: "0.17.1"
 # x-release-please-end
 description: "Event bus: espOS lifecycle events (network, SignalK, OTA) on the default esp_event loop"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_event"
