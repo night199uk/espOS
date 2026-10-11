@@ -482,7 +482,8 @@ export function startMock(port = 8484): http.Server {
           // A board that declared itself, so the Board row is exercised; a C6
           // has no PSRAM, which is the "no PSRAM" branch rather than a missing
           // one. Both are states a happy-path mock would never show.
-          hardware: { mac: "60:55:f9:00:1a:2b", cpu_mhz: 160, flash_bytes: 8 * 1024 * 1024,
+          hardware: { mac: "60:55:f9:00:1a:2b", cpu_mhz: 160, flash_bytes: 4 * 1024 * 1024,
+            flash_physical_bytes: 8 * 1024 * 1024, flash_partitioned_bytes: 0x3f0000,
             ram_internal_bytes: 512 * 1024, ram_psram_bytes: 0,
             features: ["wifi", "ble", "802.15.4", "embedded-flash"],
             // No hardware.coprocessor here on purpose. This mock is a C6

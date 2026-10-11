@@ -21,6 +21,7 @@
 #if !CONFIG_IDF_TARGET_LINUX
 #include "esp_flash.h"
 #include "esp_heap_caps.h"
+#include "esp_partition.h"
 #include "esp_mac.h"
 #endif
 #include "esp_idf_version.h"
@@ -290,9 +291,42 @@ static void add_hardware(cJSON *j, const esp_chip_info_t *chip)
      * compare against another board's -- a P4 at 360 MHz next to a C6 at 160. */
     cJSON_AddNumberToObject(hw, "cpu_mhz", CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
 
+    /* Three flash sizes, because they differ in practice: the cockpit is
+     * built for 16 MB and ships on 32 MB panels. flash_bytes is the size the
+     * image header declares, which is all esp_flash_get_size() reports;
+     * flash_physical_bytes is the chip's own, from its JEDEC id; and
+     * flash_partitioned_bytes is where the last partition ends, so the room
+     * left for a bigger partition table is the difference. The JEDEC read
+     * holds the flash lock, so it is done once. */
     uint32_t flash = 0;
     if (esp_flash_get_size(NULL, &flash) == ESP_OK) {
         cJSON_AddNumberToObject(hw, "flash_bytes", (double)flash);
+    }
+    static bool physical_read = false;
+    static uint32_t physical = 0;
+    if (!physical_read) {
+        physical_read = true;
+        if (esp_flash_get_physical_size(NULL, &physical) != ESP_OK) {
+            physical = 0;
+        }
+    }
+    if (physical != 0) {
+        cJSON_AddNumberToObject(hw, "flash_physical_bytes", (double)physical);
+    }
+    uint32_t partitioned = 0;
+    /* esp_partition_next() frees the iterator when it returns NULL, so a
+     * loop that runs to the end has nothing left to release. */
+    for (esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+         it != NULL; it = esp_partition_next(it)) {
+        const esp_partition_t *part = esp_partition_get(it);
+        /* An external flash registered as a partition has its own address
+         * space; only the boot chip's table says how full the chip is. */
+        if (part->flash_chip == esp_flash_default_chip && part->address + part->size > partitioned) {
+            partitioned = part->address + part->size;
+        }
+    }
+    if (partitioned != 0) {
+        cJSON_AddNumberToObject(hw, "flash_partitioned_bytes", (double)partitioned);
     }
 
     /* Totals, not free -- free heap is already reported and moves every
