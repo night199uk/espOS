@@ -3,7 +3,7 @@
 ## espos_sensors component manifest: registry metadata for signalk-espos/espos_sensors.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.17.1"
+version: "0.17.2"
 # x-release-please-end
 description: "Sensor drivers on the IDF 6 APIs -- ADC, GPIO, PCNT, LEDC, I2C, 1-Wire -- as espos::flow nodes"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_sensors"
@@ -32,7 +32,7 @@ dependencies:
   idf: ">=6.0.0,<6.1.0"
   signalk-espos/espos_flow:
     # x-release-please-start-version
-    version: "^0.17.1"
+    version: "^0.17.2"
     # x-release-please-end
     override_path: "../espos_flow"
 ## The DS18B20 driver is NOT a dependency here on purpose. The component

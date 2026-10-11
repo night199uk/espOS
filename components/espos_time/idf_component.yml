@@ -3,7 +3,7 @@
 ## espos_time component manifest: registry metadata for signalk-espos/espos_time.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.17.1"
+version: "0.17.2"
 # x-release-please-end
 description: "The device's wall clock: SNTP, SignalK and RTC sources behind one ranked API"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_time"
@@ -43,16 +43,16 @@ dependencies:
   idf: ">=6.0.0,<6.1.0"
   signalk-espos/espos_config:
     # x-release-please-start-version
-    version: "^0.17.1"
+    version: "^0.17.2"
     # x-release-please-end
     override_path: "../espos_config"
   signalk-espos/espos_httpd:
     # x-release-please-start-version
-    version: "^0.17.1"
+    version: "^0.17.2"
     # x-release-please-end
     override_path: "../espos_httpd"
   signalk-espos/espos_event:
     # x-release-please-start-version
-    version: "^0.17.1"
+    version: "^0.17.2"
     # x-release-please-end
     override_path: "../espos_event"
