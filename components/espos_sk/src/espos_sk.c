@@ -324,11 +324,13 @@ static void load_cfg(void)
 
 /* ---------------------------------------------------- server choice */
 
-/* Discovery is pointless once a manual host is configured: the address is
- * already known, select_server() ignores discovered entries entirely, and
- * browsing on regardless only spends radio time and mDNS traffic to
- * maintain a list nothing reads. Setting an explicit address should mean
- * exactly that — talk to this server, stop looking for others. */
+/* Periodic discovery is pointless once a manual host is configured: the
+ * address is already known, select_server() reads the discovered entries
+ * only for that address's self and scheme, and browsing on regardless only
+ * spends radio time and mDNS traffic. Setting an explicit address should
+ * mean exactly that — talk to this server, stop looking for others. The
+ * list keeps what was last seen, for the web UI; POST /sk/discover still
+ * refreshes it. */
 static inline bool discovery_wanted(void)
 {
     return s.discovery_enabled && !s.cfg_host[0];
@@ -402,6 +404,32 @@ static uint32_t carry_window_ms(void)
     return 2 * s.discover_interval_ms + 5000;
 }
 
+/* Seen recently enough to be believed. With a manual host the list is no
+ * longer refreshed, so its entries can be days old. Call under lock(). */
+static bool entry_fresh(const espos_sk_discovered_t *d, uint32_t t)
+{
+    return (uint32_t)(t - d->seen_ms) < carry_window_ms();
+}
+
+/* Drop what entry_fresh() no longer believes, as a discovery round would. */
+static void prune_stale_servers(void)
+{
+    uint32_t t = now_ms();
+    size_t m = 0;
+    lock();
+    for (size_t i = 0; i < s.server_count; i++) {
+        if (entry_fresh(&s.servers[i], t)) {
+            s.avoid_until_ms[m] = s.avoid_until_ms[i];
+            s.servers[m++] = s.servers[i];
+        }
+    }
+    for (size_t i = m; i < s.server_count; i++) {
+        s.avoid_until_ms[i] = 0;
+    }
+    s.server_count = m;
+    unlock();
+}
+
 /* A server with the anchor's self URN but another address is a twin
  * (sk_select.c) until the anchored address has gone unheard for this many
  * answered rounds; after that it is taken to be our server at a new address.
@@ -457,11 +485,15 @@ static bool anchor_self_fallback(const espos_sk_anchor_t *a)
     return is_anchor_key(a) && s.anchor_unheard_rounds >= ANCHOR_UNHEARD_ROUNDS;
 }
 
+static void publish_servers(void);
+
 /* Pick the server per config: manual host wins; else the discovered server
  * with the preferred self; else the server our token or pending request
  * belongs to; else the "master", then any server, in election order
- * (espos_sk_disc_before). Task-private. */
-static void select_server(void)
+ * (espos_sk_disc_before). Task-private. Publishes the server list when the
+ * choice moved, so its "selected" flags follow every caller; returns
+ * whether it did. */
+static bool select_server(void)
 {
     espos_sk_server_t chosen = { 0 };
     const char *source = "";
@@ -473,8 +505,10 @@ static void select_server(void)
         chosen.port = s.cfg_port;
         /* self may be known from a discovered entry with the same host:port */
         lock();
+        uint32_t t = now_ms();
         for (size_t i = 0; i < s.server_count; i++) {
-            if (strcmp(s.servers[i].host, chosen.host) == 0 && s.servers[i].port == chosen.port) {
+            if (entry_fresh(&s.servers[i], t) && strcmp(s.servers[i].host, chosen.host) == 0 &&
+                s.servers[i].port == chosen.port) {
                 snprintf(chosen.self, sizeof(chosen.self), "%s", s.servers[i].self);
                 /* A manual host discovery happens to have seen has already
                  * told us its scheme; that beats a probe, which is only the
@@ -560,8 +594,10 @@ static void select_server(void)
                                                       strcmp(chosen.self, s.server.self) != 0));
     bool source_changed = strcmp(source, s.server_source) != 0;
     bool by_self_changed = have && !changed && chosen.by_self != s.server.by_self;
+    lock(); /* espos_sk_servers_json() reads the choice on other tasks */
     s.have_server = have;
     s.server = chosen;
+    unlock();
     snprintf(s.server_source, sizeof(s.server_source), "%s", source);
     if (!changed && source_changed) {
         p_status_changed(NULL); /* same server, different provenance: refresh the snapshot */
@@ -592,6 +628,24 @@ static void select_server(void)
             ESP_LOGI(TAG, "no server (waiting for discovery or manual host)");
         }
         espos_sk_tok_event(&s.sm, ESPOS_SK_EV_SERVER, have ? &chosen : NULL);
+    }
+    /* After the choice is stored: a list published before it showed the
+     * previous server as selected, and a pick in the list looked as if it
+     * had not taken. */
+    bool publish = changed || source_changed || by_self_changed;
+    if (publish) {
+        publish_servers();
+    }
+    return publish;
+}
+
+/* The server list as the web UI shows it. */
+static void publish_servers(void)
+{
+    char *json = NULL;
+    if (espos_sk_servers_json(&json) == ESP_OK) {
+        espos_httpd_sse_publish("sk_servers", json);
+        free(json);
     }
 }
 
@@ -699,12 +753,9 @@ static void run_discovery(void)
     free(found);
     free(merged);
     ESP_LOGI(TAG, "discovery: %u server(s)", (unsigned)m);
-    char *json = NULL;
-    if (espos_sk_servers_json(&json) == ESP_OK) {
-        espos_httpd_sse_publish("sk_servers", json);
-        free(json);
+    if (!select_server()) {
+        publish_servers(); /* the entries changed even when the choice did not */
     }
-    select_server();
 }
 
 /* ------------------------------------------------------------ task */
@@ -712,14 +763,24 @@ static void run_discovery(void)
 static void handle_cmd(const cmd_t *c)
 {
     switch (c->type) {
-    case CMD_CONFIG:
+    case CMD_CONFIG: {
         load_cfg();
-        if (!discovery_wanted()) {
+        /* Only switching discovery off empties the list. A manual host keeps
+         * it: the entries say which of them is the pinned one, and an empty
+         * list after picking a row read as if the pick had been lost. Back
+         * to discovery, the election must not run on what the manual host
+         * left unrefreshed. */
+        size_t before = s.server_count;
+        if (!s.discovery_enabled) {
             lock();
             s.server_count = 0; /* discovered entries are no longer valid choices */
             unlock();
+        } else if (!s.cfg_host[0]) {
+            prune_stale_servers();
         }
-        select_server();
+        if (!select_server() && s.server_count != before) {
+            publish_servers();
+        }
         /* Browse now whenever discovery has just become wanted again —
          * discovery switched on, or a manual host cleared. Testing only
          * `discover_due_ms == 0` was not enough: setting a manual host
@@ -732,6 +793,7 @@ static void handle_cmd(const cmd_t *c)
             s.discover_due_ms = 0;
         }
         break;
+    }
     case CMD_DISCOVER:
         /* Deliberately NOT discovery_wanted(): this is an explicit request
          * from POST /sk/discover, and the endpoint has already answered
@@ -1071,7 +1133,7 @@ esp_err_t espos_sk_servers_json(char **out_json)
         cJSON_AddStringToObject(e, "swvers", d->swvers);
         cJSON_AddStringToObject(e, "scheme", d->tls ? "https" : "http");
         cJSON_AddNumberToObject(e, "seen_s", (t - d->seen_ms) / 1000);
-        cJSON_AddBoolToObject(e, "selected", s.snap.has_server && strcmp(s.snap.server.host, d->host) == 0 && s.snap.server.port == d->port);
+        cJSON_AddBoolToObject(e, "selected", s.have_server && strcmp(s.server.host, d->host) == 0 && s.server.port == d->port);
         cJSON_AddItemToArray(arr, e);
     }
     if (s.last_discovery_ms) {

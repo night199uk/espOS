@@ -481,7 +481,9 @@ what every boat server has.
   on the plain port is tried once over https before concluding the host is
   down. **The probe carries no token** — it is aimed at an address that has not
   been established as our server yet, and handing the credential to whatever
-  answers is exactly what must not happen.
+  answers is exactly what must not happen. A manual host that discovery saw
+  within the carry-over window (picked from the server list, say) takes the
+  scheme it advertised instead, with no probe.
 
   No answer on either scheme is not an answer. The host may be down, still
   booting, or not reachable yet, and on a boat the server usually comes up

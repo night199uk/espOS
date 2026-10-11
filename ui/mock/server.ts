@@ -207,7 +207,21 @@ export function startMock(port = 8484): http.Server {
       skRequest();
     }
   }
-  const serversDoc = () => ({ servers: discovered.map((s) => ({ ...s, selected: s.self === sk.server.self })), last_s: discoverAt ? Math.round((Date.now() - discoverAt) / 1000) : null });
+  // Selected by address, as on the device: twins share a self.
+  const serversDoc = () => ({ servers: discovered.map((s) => ({ ...s, selected: s.host === sk.server.host && s.port === sk.server.port })), last_s: discoverAt ? Math.round((Date.now() - discoverAt) / 1000) : null });
+  // An sk config change re-runs the choice; the device publishes the list
+  // whenever the server in use moves, so a pick shows at once.
+  function skReselect() {
+    const c = cfg("sk");
+    const pick: SkServer | undefined = c.server_host
+      ? { ...discovered.find((s) => s.host === c.server_host && s.port === c.server_port), host: c.server_host, port: c.server_port, source: "manual" }
+      : c.server_self ? (() => { const d = discovered.find((s) => s.self === c.server_self); return d && { ...d, source: "discovered" }; })()
+      : undefined;
+    if (!pick || (pick.host === sk.server.host && pick.port === sk.server.port && pick.source === sk.server.source)) return;
+    sk.server = { host: pick.host, port: pick.port, self: pick.self ?? "", source: pick.source, name: pick.name ?? pick.host, swname: pick.swname ?? "", swvers: pick.swvers ?? "", by_self: false };
+    skEmit();
+    emit("sk_servers", serversDoc());
+  }
   let approveTimer: ReturnType<typeof setTimeout> | undefined;
   function skRequest() {
     if (sk.token.has_token) return;
@@ -526,6 +540,7 @@ export function startMock(port = 8484): http.Server {
         }
         if (changed.includes("httpd.api_key")) { auth.sessions.clear(); logAndMark(authRequired() ? "I" : "W", "espos_auth", authRequired() ? "API key set: protected endpoints need Bearer or a login" : "no API key set: the REST API is open to the network"); }
         if (changed.some((c) => c.startsWith("wifi."))) wifiEval();
+        if (changed.some((c) => c.startsWith("sk."))) skReselect();
         if (changed.some((c) => c.startsWith("sk."))) { if (!cfg("sk").ws_enabled) wsConnect(); else if (sk.token.has_token) wsConnect(); }
         return json(res, 200, { changed, restart_required: restart });
       }

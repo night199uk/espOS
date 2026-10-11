@@ -2490,7 +2490,9 @@ class SkTlsTests(unittest.TestCase):
         if sk_tls() is None:
             self.skipTest("built without CONFIG_ESPOS_SK_TLS")
         n0 = len([e for e in self.mock.ctl("log")[1] if e[0] == "GET" and e[1] == "/signalk"])
-        req("PUT", "/api/v1/config", {"sk": {"server_host": "127.0.0.1",
+        # Discovery off empties the list: an address discovery has just seen
+        # takes the scheme it advertised, and this test is about the probe.
+        req("PUT", "/api/v1/config", {"sk": {"server_host": "127.0.0.1", "discovery": False,
                                              "server_port": self.mock.port, "scheme": "auto"}})
         # A plain server that does not redirect stays plain.
         js = wait_sk(lambda j: j["server"].get("source") == "manual"
@@ -2499,7 +2501,7 @@ class SkTlsTests(unittest.TestCase):
         probes = [e for e in self.mock.ctl("log")[1] if e[0] == "GET" and e[1] == "/signalk"]
         self.assertGreater(len(probes), n0, "the manual host was never probed")
         self.assertIsNone(probes[-1][2], probes[-1])
-        req("PUT", "/api/v1/config", {"sk": {"server_host": None}})
+        req("PUT", "/api/v1/config", {"sk": {"server_host": None, "discovery": True}})
 
 
 class SkSchemeAdvertisedTests(unittest.TestCase):
