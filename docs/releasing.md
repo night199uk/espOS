@@ -253,9 +253,17 @@ entries a *changed* manifest touches, so an entry nobody edits keeps its old
 value indefinitely. A release is exactly that case — release-please rewrites
 every `espos_*` manifest and re-solves nothing, so 0.15.0 shipped with all
 fourteen lock entries still reading 0.14.0. The `release-lock` job in
-`release-please.yml` regenerates the lock on the release branch each time
-release-please rewrites it, and CI's `dependencies.lock matches the manifests`
-check fails any pull request, and `main`, whose lock has fallen behind.
+`release-please.yml` regenerates the lock on the release branch, and CI's
+`dependencies.lock matches the manifests` check fails any pull request, and
+`main`, whose lock has fallen behind.
+
+The job runs on every push to `main` while a release PR is open, not only when
+release-please rewrites the release branch. A merge release-please ignores, such
+as a `chore(deps)` bump, can still change `dependencies.lock` on `main`, and the
+release branch's own lock commit then conflicts with it. 0.18.0 hit exactly that
+after #213. So the job first merges `main` into the release branch, takes
+`main`'s side of a `dependencies.lock` conflict and regenerates it, and fails on
+any other conflict, which needs a person.
 
 That job pushes with `DRIFT_PR_TOKEN` so the push starts CI on the release
 PR. Without the secret it falls back to the workflow token, whose pushes start
