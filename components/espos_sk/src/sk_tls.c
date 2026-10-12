@@ -483,7 +483,7 @@ void espos_sk_tls_set_trust(espos_sk_tls_trust_t trust, const char *ca_pem)
             /* No SAN yet: the CA does not name the server. The first
              * successful connect binds the leaf's set (commit below). */
             s.anchor = a;
-            (void)anchor_store(&a);
+            s.store_pending = anchor_store(&a) != ESP_OK;
             ESP_LOGI(TAG, "CA supplied by configuration: anchored on %s", a.cn[0] ? a.cn : "(no CN)");
         }
     }
