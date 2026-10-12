@@ -77,6 +77,6 @@ dependencies:
   # own would change what is on a boat with no review and no flash.
   # tools/espos_registry_updates.py reports when a newer one exists.
   espressif/esp-sr:
-    version: "==2.5.5"
+    version: "==2.6.0"
     rules:
       - if: "target in [esp32s3, esp32p4]"
