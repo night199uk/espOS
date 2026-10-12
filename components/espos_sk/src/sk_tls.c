@@ -598,7 +598,7 @@ static bool run_on_internal_stack(void (*fn)(void))
     }
     /* A semaphore rather than a task notification: the caller is whatever
      * task made the request, and its notification value may be in use. */
-    nvs_job_t job = {.fn = fn, .done = xSemaphoreCreateBinary()};
+    nvs_job_t job = { .fn = fn, .done = xSemaphoreCreateBinary() };
     bool ran = job.done && xTaskCreate(nvs_job_task, "espos_sktls", 4096, &job, 5, NULL) == pdPASS;
     if (ran) {
         (void)xSemaphoreTake(job.done, portMAX_DELAY);
