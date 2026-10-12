@@ -51,17 +51,19 @@ menu "espOS SignalK"
 
     config ESPOS_SK_WS_TASK_STACK
         int "SignalK stream task stack size (bytes)"
-        default 8192
+        default 10240
         range 6144 16384
         help
             The websocket task: frame reassembly, delta parsing, inbound PUT
             dispatch and the notification sink.
 
-            Deliberately NOT reduced, and that is the measurement talking
-            rather than caution: the same run that found the client task using
-            12 % of its stack showed this one using 5272 of 8192 B, 64 %, with
-            only 2920 B spare. It parses whatever the server sends, so its
-            depth depends on frames this device did not choose.
+            Raised from 8192 on a second measurement: a 112-minute run of the
+            BLE gateway on an ESP32-C5 (control WebSocket on, REST traffic,
+            OTA attempts) peaked at 6904 B -- up from the 5272 B of the first
+            run, with only 1288 B of 8192 left, and still over plain ws with
+            no TLS on this task. It parses whatever the server sends, so its
+            depth depends on frames this device did not choose; the first run
+            was simply a quieter server.
 
             It also carries the deeper HTTP work than its name suggests:
             reconcile_meta() runs here, and it issues espos_sk_http_get_meta()

@@ -657,7 +657,7 @@ literals in the source.
 * **`CONFIG_ESPOS_SK_TASK_STACK`** (default 12288, range 6144–16384) — the client
   task: discovery, the token state machine and its HTTP legs (access request,
   poll, verify), plus the https probe.
-* **`CONFIG_ESPOS_SK_WS_TASK_STACK`** (default 8192, range 6144–16384) — the
+* **`CONFIG_ESPOS_SK_WS_TASK_STACK`** (default 10240, range 6144–16384) — the
   stream task: frame reassembly, delta parsing, inbound PUT dispatch, the
   notification sink — and metadata reconciliation, which issues an HTTP GET and
   PUT per path (`reconcile_meta()` is called from `ws_task()`, not from the
@@ -671,6 +671,20 @@ discovery, an approved token, meta for the published paths — with
 |---|---|---|---|
 | `espos_sk` | 12288 | 1488 | 10800 (88 %) |
 | `espos_skws` | 8192 | 5272 | 2920 (36 %) |
+
+A second run on the same kind of board, 112 minutes with the gateway's control
+WebSocket on, REST requests every 10 minutes and an OTA attempt every 30
+(still plain HTTP/ws):
+
+| task | allocated | peak use | never touched |
+|---|---|---|---|
+| `espos_sk` | 12288 | 4280 | 8008 (65 %) |
+| `espos_skws` | 8192 | 6904 | 1288 (16 %) |
+
+The stream task's peak grew by 1.6 KB with nothing but a busier server, which
+left 1.3 KB between it and a stack-protection reboot loop -- before any TLS. Its
+default is now 10240. The client task's peak nearly tripled too, which is the
+argument above for not lowering its default, made by the data.
 
 **Neither default was lowered on the strength of that, and the reason is worth
 stating.** The server in that run was plain HTTP on port 80, so no TLS handshake
