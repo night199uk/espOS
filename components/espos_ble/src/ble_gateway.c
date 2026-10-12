@@ -1111,9 +1111,10 @@ esp_err_t espos_ble_start(void)
      * rather than a degraded mode. The big scratch buffers are static (see
      * s_post_batch) so this covers the call depth, not the payloads. */
 #if CONFIG_ESPOS_BLE_STACK_IN_PSRAM
-    /* In PSRAM where the board has it: this task never touches flash (config
+    /* In PSRAM where the board has it: this task never writes flash (config
      * is read above, on the caller's task; an unauthorised POST is reported to
-     * espos_sk as a queued command), so its stack is never needed while the
+     * espos_sk as a queued command; a TLS pin a POST commits is saved by
+     * espos_sk from an internal stack), so its stack is never needed while the
      * cache is off, and 8 KB of internal RAM is a lot on a part that has
      * ~170 KB of it. */
     BaseType_t created = xTaskCreateWithCaps(gateway_task, "espos_ble", CONFIG_ESPOS_BLE_STACK_SIZE, NULL, 5,

@@ -42,9 +42,11 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_memory_utils.h"
 #include "mbedtls/md.h"
 #include "mbedtls/oid.h"
 #include "mbedtls/ssl.h"
@@ -108,6 +110,7 @@ static struct {
     SemaphoreHandle_t handshake; /* one TLS handshake at a time, device-wide */
     bool loaded;
     anchor_t anchor;
+    bool store_pending; /* s.anchor differs from NVS: a deferred write failed to start */
     capture_t cap;
     espos_sk_tls_trust_t trust;
     char ca_pem[CONFIG_ESPOS_SK_TLS_CA_MAX]; /* trust == CA: the operator's anchor, PEM */
@@ -555,6 +558,41 @@ void espos_sk_tls_discard(void)
     unlock();
 }
 
+static void store_task(void *arg)
+{
+    (void)arg;
+    /* Under the lock for the write too, as a direct commit is: a reset that
+     * lands between reading the anchor and writing it would otherwise be
+     * undone by this task writing the old one back. An empty anchor means a
+     * reset got there first and has already erased the record. */
+    lock();
+    if (s.anchor.kind != ESPOS_SK_TLS_ANCHOR_NONE) {
+        s.store_pending = anchor_store(&s.anchor) != ESP_OK;
+    }
+    unlock();
+    vTaskDelete(NULL);
+}
+
+/* Called with the lock held, s.anchor already updated. A commit runs on
+ * whichever task made the request, and an NVS write switches the cache, and
+ * with it PSRAM, off: a caller whose stack is in PSRAM (the BLE gateway with
+ * CONFIG_ESPOS_BLE_STACK_IN_PSRAM) would fault mid-write. Such a caller hands
+ * the write to a short-lived task on an internal stack instead. The task reads
+ * s.anchor when it runs, so a later commit can never be overwritten by an
+ * older one. */
+static void persist_anchor(void)
+{
+    int probe;
+    if (esp_ptr_internal(&probe)) {
+        s.store_pending = anchor_store(&s.anchor) != ESP_OK;
+        return;
+    }
+    s.store_pending = xTaskCreate(store_task, "espos_sktls", 4096, NULL, 5, NULL) != pdPASS;
+    if (s.store_pending) {
+        ESP_LOGW(TAG, "no memory to save the trust anchor now; retrying on the next connection");
+    }
+}
+
 void espos_sk_tls_commit(const char *server_self)
 {
     ensure_init();
@@ -595,11 +633,14 @@ void espos_sk_tls_commit(const char *server_self)
     }
     memset(&s.cap, 0, sizeof(s.cap));
     if (!changed) {
+        if (s.store_pending) {
+            persist_anchor();
+        }
         unlock();
         return;
     }
     s.anchor = a;
-    (void)anchor_store(&a);
+    persist_anchor();
     unlock();
     ESP_LOGI(TAG, "pinned the server's %s%s%s", a.kind == ESPOS_SK_TLS_ANCHOR_CA ? "CA" : "certificate",
              a.cn[0] ? " for " : "", a.cn);
@@ -612,6 +653,7 @@ esp_err_t espos_sk_tls_reset(void)
     lock();
     memset(&s.anchor, 0, sizeof(s.anchor));
     memset(&s.cap, 0, sizeof(s.cap));
+    s.store_pending = false;
     s.last_error[0] = '\0';
     anchor_erase();
     unlock();
