@@ -439,7 +439,7 @@ static int verify_cb(void *ctx, mbedtls_x509_crt *crt, int depth, uint32_t *flag
 
 /* -------------------------------------------------------------- public API */
 
-static bool run_on_internal_stack(void (*fn)(void));
+static inline bool run_on_internal_stack(void (*fn)(void));
 
 static void ensure_init(void)
 {
@@ -568,7 +568,9 @@ void espos_sk_tls_discard(void)
  * is in PSRAM (the BLE gateway with CONFIG_ESPOS_BLE_STACK_IN_PSRAM) would
  * fault mid-access. espos_sk calls run on whichever task made the request, so
  * such a caller hands the NVS work to a short-lived task on an internal stack
- * and waits for it. Returns false if that task could not be started. */
+ * and waits for it. Returns false if that task could not be started. Without
+ * PSRAM it is a plain call: the C5's image sits close to its size budget. */
+#if CONFIG_SPIRAM
 typedef struct {
     void (*fn)(void);
     SemaphoreHandle_t done;
@@ -586,13 +588,8 @@ static void nvs_job_task(void *arg)
 
 static bool run_on_internal_stack(void (*fn)(void))
 {
-#if CONFIG_SPIRAM
     int probe = 0; /* only its address is used */
-    bool stack_external = esp_ptr_external_ram(&probe);
-#else
-    bool stack_external = false;
-#endif
-    if (!stack_external) {
+    if (!esp_ptr_external_ram(&probe)) {
         fn();
         return true;
     }
@@ -608,16 +605,17 @@ static bool run_on_internal_stack(void (*fn)(void))
     }
     return ran;
 }
+#else
+static inline bool run_on_internal_stack(void (*fn)(void))
+{
+    fn();
+    return true;
+}
+#endif
 
 static void store_anchor(void)
 {
-    esp_err_t err = anchor_store(&s.anchor);
-    /* Retried on every commit until it lands; say so once, not every time. */
-    if (err != ESP_OK && !s.store_pending) {
-        ESP_LOGW(TAG, "could not save the trust anchor (%s); retrying on the next connection",
-                 esp_err_to_name(err));
-    }
-    s.store_pending = err != ESP_OK;
+    s.store_pending = anchor_store(&s.anchor) != ESP_OK;
 }
 
 /* Called with the lock held, s.anchor already updated. Waits for the write
