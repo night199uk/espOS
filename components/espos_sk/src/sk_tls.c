@@ -439,6 +439,8 @@ static int verify_cb(void *ctx, mbedtls_x509_crt *crt, int depth, uint32_t *flag
 
 /* -------------------------------------------------------------- public API */
 
+static bool run_on_internal_stack(void (*fn)(void));
+
 static void ensure_init(void)
 {
     if (!s.lock) {
@@ -448,8 +450,10 @@ static void ensure_init(void)
         s.handshake = hs;
         mbedtls_x509_crt_init(&s.ca_crt);
     }
+    /* Normally done at boot; a retry after a failed open can come from a
+     * task whose stack is in PSRAM. */
     if (!s.loaded) {
-        anchor_load();
+        (void)run_on_internal_stack(anchor_load);
     }
 }
 
@@ -560,23 +564,27 @@ void espos_sk_tls_discard(void)
     unlock();
 }
 
-static void store_task(void *arg)
+/* NVS access switches the cache, and with it PSRAM, off: a caller whose stack
+ * is in PSRAM (the BLE gateway with CONFIG_ESPOS_BLE_STACK_IN_PSRAM) would
+ * fault mid-access. espos_sk calls run on whichever task made the request, so
+ * such a caller hands the NVS work to a short-lived task on an internal stack
+ * and waits for it. Returns false if that task could not be started. */
+typedef struct {
+    void (*fn)(void);
+    SemaphoreHandle_t done;
+} nvs_job_t;
+
+static void nvs_job_task(void *arg)
 {
-    /* No lock() here: the committing task holds it and waits for this one,
-     * so nothing can change the anchor until the write is done. */
-    s.store_pending = anchor_store(&s.anchor) != ESP_OK;
-    xSemaphoreGive((SemaphoreHandle_t)arg);
+    nvs_job_t *job = arg;
+    /* No lock() here: the caller waits for this task, and when it holds the
+     * lock nothing can change the anchor until the work is done. */
+    job->fn();
+    xSemaphoreGive(job->done);
     vTaskDelete(NULL);
 }
 
-/* Called with the lock held, s.anchor already updated. A commit runs on
- * whichever task made the request, and an NVS write switches the cache, and
- * with it PSRAM, off: a caller whose stack is in PSRAM (the BLE gateway with
- * CONFIG_ESPOS_BLE_STACK_IN_PSRAM) would fault mid-write. Such a caller hands
- * the write to a short-lived task on an internal stack instead, and waits for
- * it: a commit returns with the anchor in NVS either way, so a reboot straight
- * after cannot leave the next connect to pin afresh. */
-static void persist_anchor(void)
+static bool run_on_internal_stack(void (*fn)(void))
 {
 #if CONFIG_SPIRAM
     int probe = 0; /* only its address is used */
@@ -585,19 +593,40 @@ static void persist_anchor(void)
     bool stack_external = false;
 #endif
     if (!stack_external) {
-        s.store_pending = anchor_store(&s.anchor) != ESP_OK;
-        return;
+        fn();
+        return true;
     }
     /* A semaphore rather than a task notification: the caller is whatever
      * task made the request, and its notification value may be in use. */
-    SemaphoreHandle_t done = xSemaphoreCreateBinary();
-    if (done && xTaskCreate(store_task, "espos_sktls", 4096, done, 5, NULL) == pdPASS) {
-        (void)xSemaphoreTake(done, portMAX_DELAY);
-        vSemaphoreDelete(done);
-    } else {
-        if (done) {
-            vSemaphoreDelete(done);
-        }
+    nvs_job_t job = {.fn = fn, .done = xSemaphoreCreateBinary()};
+    bool ran = job.done && xTaskCreate(nvs_job_task, "espos_sktls", 4096, &job, 5, NULL) == pdPASS;
+    if (ran) {
+        (void)xSemaphoreTake(job.done, portMAX_DELAY);
+    }
+    if (job.done) {
+        vSemaphoreDelete(job.done);
+    }
+    return ran;
+}
+
+static void store_anchor(void)
+{
+    esp_err_t err = anchor_store(&s.anchor);
+    /* Retried on every commit until it lands; say so once, not every time. */
+    if (err != ESP_OK && !s.store_pending) {
+        ESP_LOGW(TAG, "could not save the trust anchor (%s); retrying on the next connection",
+                 esp_err_to_name(err));
+    }
+    s.store_pending = err != ESP_OK;
+}
+
+/* Called with the lock held, s.anchor already updated. Waits for the write
+ * even when it is handed off: a commit returns with the anchor in NVS either
+ * way, so a reboot straight after cannot leave the next connect to pin
+ * afresh. */
+static void persist_anchor(void)
+{
+    if (!run_on_internal_stack(store_anchor)) {
         s.store_pending = true;
         ESP_LOGW(TAG, "no memory to save the trust anchor now; retrying on the next connection");
     }

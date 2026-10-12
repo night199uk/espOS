@@ -52,8 +52,9 @@ menu "espOS BLE gateway"
         depends on SPIRAM && FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
         default y
         help
-            The gateway task never writes flash itself (espos_sk saves a
-            TLS pin from an internal stack when the caller's is in PSRAM),
+            The gateway task never touches flash itself (espos_sk reads and
+            saves the TLS pin from an internal stack when the caller's is in
+            PSRAM),
             so its stack may live in PSRAM, which frees ESPOS_BLE_STACK_SIZE
             bytes of internal RAM. That matters on a single-chip board such
             as the ESP32-C5, where BLE, WiFi and the SignalK client share
