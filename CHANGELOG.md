@@ -15,6 +15,22 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.18.0 (2026-10-12)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Added
+* feat(httpd): report the chip's flash size and partition end by @dirkwa in https://github.com/signalk-espOS/espOS/pull/204
+* feat(ble): run the BLE gateway on the ESP32-C5 by @dirkwa in https://github.com/signalk-espOS/espOS/pull/207
+* feat(ble): suspend scanning during firmware updates and keep the gateway stack in PSRAM by @dirkwa in https://github.com/signalk-espOS/espOS/pull/211
+* feat(ble): free C5 gateway internal RAM into PSRAM by @dirkwa in https://github.com/signalk-espOS/espOS/pull/214
+### Fixed
+* fix(sk): raise the stream task stack to 10240 after it peaked at 6904 of 8192 B by @dirkwa in https://github.com/signalk-espOS/espOS/pull/212
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.17.3...v0.18.0
+
 ## 0.17.3 (2026-10-11)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->

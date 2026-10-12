@@ -3,7 +3,7 @@
 ## espos_voice component manifest: registry metadata for signalk-espos/espos_voice.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.17.3"
+version: "0.18.0"
 # x-release-please-end
 description: "Wyoming voice satellite with esp-sr wake word"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_voice"
@@ -56,12 +56,12 @@ dependencies:
   # from the registry has no such directory and the field is ignored there.
   signalk-espos/espos_audio:
     # x-release-please-start-version
-    version: "^0.17.3"
+    version: "^0.18.0"
     # x-release-please-end
     override_path: "../espos_audio"
   signalk-espos/espos_health:
     # x-release-please-start-version
-    version: "^0.17.3"
+    version: "^0.18.0"
     # x-release-please-end
     override_path: "../espos_health"
   # cJSON, exact-pinned like every other registry dependency here: the
