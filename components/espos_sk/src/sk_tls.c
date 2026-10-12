@@ -585,7 +585,7 @@ static void store_task(void *arg)
 static void persist_anchor(void)
 {
 #if CONFIG_SPIRAM
-    int probe;
+    int probe = 0; /* only its address is used */
     bool stack_external = esp_ptr_external_ram(&probe);
 #else
     bool stack_external = false;
