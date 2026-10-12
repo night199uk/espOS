@@ -213,12 +213,19 @@ static char *build_adv_body(const espos_ble_adv_t *ads, size_t n)
     return out;
 }
 
-/* Scratch for one POST. Deliberately static rather than stack: the batch
- * alone is POST_BATCH_MAX * sizeof(espos_ble_adv_t) (~5 KB), which overflows
- * the gateway task's stack the first time a POST actually runs - and that
- * only happens once a token exists, so it hides until the device is fully
- * provisioned. Only the gateway task touches these. */
-static espos_ble_adv_t s_post_batch[POST_BATCH_MAX];
+/* Scratch for one POST and for the control socket's upgrade headers. Not on
+ * the stack: the batch alone is POST_BATCH_MAX * sizeof(espos_ble_adv_t)
+ * (~5 KB), which overflows the gateway task's stack the first time a POST
+ * actually runs - and that only happens once a token exists, so it hides
+ * until the device is fully provisioned. Not static either: .bss is internal
+ * RAM, and on a PSRAM board these ~7 KB belong in PSRAM; espos_ble_start()
+ * allocates them once, PSRAM first. Only the gateway task touches them, and
+ * never with the cache off. esp_websocket_client_init() copies the headers. */
+static struct {
+    espos_ble_adv_t post_batch[POST_BATCH_MAX];
+    char ws_token[ESPOS_SK_TOKEN_MAX];
+    char ws_headers[ESPOS_SK_TOKEN_MAX + 32];
+} *s_scratch;
 
 static void post_pending(void)
 {
@@ -227,7 +234,7 @@ static void post_pending(void)
     espos_sk_server_t srv;
     if (espos_sk_get_server(&srv) != ESP_OK || !srv.host[0]) return;
 
-    espos_ble_adv_t *batch = s_post_batch;
+    espos_ble_adv_t *batch = s_scratch->post_batch;
     size_t n = 0;
     if (xSemaphoreTake(g.lock, pdMS_TO_TICKS(100)) == pdTRUE) {
         n = espos_ble_advq_drain(&g.q, batch, POST_BATCH_MAX);
@@ -625,12 +632,6 @@ static char s_ws_host[ESPOS_SK_HOST_MAX];
 static uint16_t s_ws_port;
 static bool s_ws_tls;
 
-/* Upgrade headers and the token they are built from. Static, like the POST
- * scratch: 2 KB is too much for the gateway task's stack, and only that task
- * runs here. esp_websocket_client_init() copies the headers. */
-static char s_ws_token[ESPOS_SK_TOKEN_MAX];
-static char s_ws_headers[ESPOS_SK_TOKEN_MAX + 32];
-
 static void ws_connect(void)
 {
     if (!g.control_ws) return;
@@ -657,17 +658,18 @@ static void ws_connect(void)
     /* The token travels as an upgrade header, as on the delta stream;
      * signalk-server's gateway handler reads it from the header, the query
      * string or a cookie. No token, no header: correct against an open server. */
-    s_ws_token[0] = '\0';
-    espos_sk_get_token(s_ws_token, sizeof(s_ws_token));
-    if (s_ws_token[0]) {
-        snprintf(s_ws_headers, sizeof(s_ws_headers), "Authorization: Bearer %s\r\n", s_ws_token);
+    char *token = s_scratch->ws_token, *headers = s_scratch->ws_headers;
+    token[0] = '\0';
+    espos_sk_get_token(token, sizeof(s_scratch->ws_token));
+    if (token[0]) {
+        snprintf(headers, sizeof(s_scratch->ws_headers), "Authorization: Bearer %s\r\n", token);
     } else {
-        s_ws_headers[0] = '\0';
+        headers[0] = '\0';
     }
 
     esp_websocket_client_config_t cfg = {
         .uri = url,
-        .headers = s_ws_headers[0] ? s_ws_headers : NULL,
+        .headers = headers[0] ? headers : NULL,
         .task_stack = 6144,
         /* Roomy enough that a large gatt_subscribe arrives in one frame; the
          * implementation this replaces used 1 KB and could not reassemble. */
@@ -914,6 +916,17 @@ esp_err_t espos_ble_start(void)
         return ESP_OK;
     }
 
+    /* Once per boot and never freed, so a stop/start cycle has nothing to
+     * re-acquire; see s_scratch. */
+    if (!s_scratch) {
+        s_scratch = heap_caps_malloc_prefer(sizeof(*s_scratch), 2, MALLOC_CAP_SPIRAM,
+                                            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (!s_scratch) {
+            ESP_LOGE(TAG, "no memory for the %u B gateway scratch", (unsigned)sizeof(*s_scratch));
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
     int32_t v;
     g.active_scan = false;
     espos_config_get_bool(ESPOS_CFG_NS_BLE, ESPOS_CFG_BLE_ACTIVE_SCAN, &g.active_scan);
@@ -1109,8 +1122,8 @@ esp_err_t espos_ble_start(void)
     g.task_exited = false;
     /* 8 KB by default: cJSON serialisation plus the HTTP helper's own frame
      * need real headroom, and a stack-protection fault here is a reboot loop
-     * rather than a degraded mode. The big scratch buffers are static (see
-     * s_post_batch) so this covers the call depth, not the payloads. */
+     * rather than a degraded mode. The big scratch buffers live off the stack
+     * (see s_scratch) so this covers the call depth, not the payloads. */
 #if CONFIG_ESPOS_BLE_STACK_IN_PSRAM
     /* In PSRAM where the board has it: this task never touches flash (config
      * is read above, on the caller's task; an unauthorised POST is reported to

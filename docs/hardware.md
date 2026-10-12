@@ -70,9 +70,20 @@ else moves to PSRAM:
 | `CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6` | not a move but a trim: the driver's static RX buffers must be internal, and 6 (the block-ack window) instead of 10 frees 6.4 KB. A gateway posting a few KB every 2 s does not miss them |
 | `CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM`, `CONFIG_MDNS_MEMORY_ALLOC_SPIRAM` | the mDNS task stack and its allocations. The gateway task's 8 KB stack moves too, through `CONFIG_ESPOS_BLE_STACK_IN_PSRAM`, which defaults on when both `CONFIG_SPIRAM` and `CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM` are set (except on the P4, which has internal RAM to spare). Neither task touches flash: `espos_sk` reads and saves the TLS pin a gateway POST uses from an internal stack ([signalk.md](signalk.md)) |
 | `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC` | TLS record buffers, so a handshake stops needing 24 KB of contiguous internal RAM. `espos_sk`'s pre-flight measures PSRAM when this is set |
+| `CONFIG_ESP_WIFI_IRAM_OPT`, `_RX_IRAM_OPT`, `_EXTRA_IRAM_OPT`, `_SLP_IRAM_OPT` all `n` | not data but code: WiFi library functions IDF keeps in IRAM for throughput, which on the C5 shares one SRAM with the heap. Its Kconfig help puts them at roughly 10, 17, 5 and 7 KB. Interrupt handlers stay in IRAM |
 
 `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP` stays **off**. With it, the station never
 associated (reason 36 every ~21 s).
+
+Task stacks mostly stay internal. A flash write switches the cache, and with it
+PSRAM, off, so a writing task with its stack in PSRAM crashes (dual-core targets
+assert first; the single-core C5 just faults). That rules out every task that can
+write NVS or flash: the web server (config, auth, core dump), OTA, the SignalK
+client, and the Bluetooth host. The BLE gateway's own task is the exception:
+a POST over TLS uses the server's pinned certificate, and `espos_sk` reads and
+saves that pin from an internal stack when the caller's is in PSRAM. The gateway's
+POST batch and upgrade headers (~7 KB) are data, not stack, and are allocated from
+PSRAM first.
 
 **Security caveat (rev v1.0):** IDF warns that PSRAM contents are not encrypted on
 C5/C61 rev v1.0, even with flash encryption on, and names TLS buffers as an
