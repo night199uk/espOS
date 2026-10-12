@@ -91,7 +91,7 @@ radio sees nothing at all, which looks exactly like a software failure.
 ## Build
 
 ```sh
-idf.py set-target esp32p4      # or esp32c6, esp32, esp32c3, esp32s3
+idf.py set-target esp32p4      # or esp32c6, esp32, esp32c3, esp32s3, esp32c5
 idf.py build flash monitor
 ```
 

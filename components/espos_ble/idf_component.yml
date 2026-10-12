@@ -60,6 +60,8 @@ dependencies:
     version: "^0.17.3"
     # x-release-please-end
     override_path: "../espos_sk"
+  # espos_net_is_up() and the NETWORK_UP/DOWN events: the gateway holds
+  # scanning off while the station has no network (src/ble_gateway.c).
   signalk-espos/espos_net:
     # x-release-please-start-version
     version: "^0.17.3"
