@@ -1365,9 +1365,17 @@ esp_err_t espos_ble_stop(void)
     if (!g.task_exited) {
         /* Leaking is the safe branch: freeing buffers a live task still walks
          * would be a use-after-free. Restore running so a later stop can try
-         * again rather than short-circuiting on the !g.running guard. */
+         * again rather than short-circuiting on the !g.running guard. The
+         * scanner was stopped above, so restart it too unless a hold still
+         * wants it off: running with no scanner would look healthy and
+         * forward nothing. */
         ESP_LOGW(TAG, "gateway task did not exit; leaving its buffers alone");
+        xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
         g.running = true;
+        if (g.scan_suspend_count == 0) {
+            espos_ble_scan_start(g.active_scan, (uint16_t)g.scan_int, (uint16_t)g.scan_win);
+        }
+        xSemaphoreGiveRecursive(scan_mutex());
         return ESP_ERR_TIMEOUT;
     }
     g.task = NULL;
