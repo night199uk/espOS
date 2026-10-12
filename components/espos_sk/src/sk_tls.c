@@ -642,11 +642,20 @@ esp_err_t espos_sk_tls_handshake_begin(uint32_t timeout_ms)
      * record buffers, and the failure when it is not there is not a clean
      * "no memory" -- it is a half-built session, a leaked socket, and on a
      * bad day a heap the WiFi stack then cannot allocate from either. Better
-     * to defer and say so. */
-    size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+     * to defer and say so. The pool is the one mbedTLS allocates from: with
+     * CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC that is PSRAM, and measuring internal
+     * RAM would refuse handshakes that never touch it. */
+#if CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC
+    const uint32_t caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+    const char *pool = "PSRAM";
+#else
+    const uint32_t caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    const char *pool = "internal";
+#endif
+    size_t largest = heap_caps_get_largest_free_block(caps);
     if (largest < (size_t)CONFIG_ESPOS_SK_TLS_MIN_FREE_BLOCK_KB * 1024) {
         char msg[ESPOS_HEALTH_MSG_MAX];
-        snprintf(msg, sizeof(msg), "largest free internal block %u KB, need %d KB for a TLS handshake",
+        snprintf(msg, sizeof(msg), "largest free %s block %u KB, need %d KB for a TLS handshake", pool,
                  (unsigned)(largest / 1024), CONFIG_ESPOS_SK_TLS_MIN_FREE_BLOCK_KB);
         (void)espos_health_report("tlsMemory", ESPOS_HEALTH_WARN, msg);
         xSemaphoreGive(s.handshake);

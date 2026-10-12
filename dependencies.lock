@@ -371,6 +371,6 @@ direct_dependencies:
 - signalk-espos/espos_sk_flow
 - signalk-espos/espos_time
 - signalk-espos/espos_wifi
-manifest_hash: 94c3d0ad76e9d79ba4b7e691ec27f39c06dbb1b958292e17c99f2f35c38b2962
+manifest_hash: 6df726606c4883c490073ca620aa21f3d2ae97601ea11e94130f4cd4c7298fc2
 target: esp32s3
 version: 3.0.0

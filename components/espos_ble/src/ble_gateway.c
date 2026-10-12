@@ -42,6 +42,7 @@
 #include "espos_ble.h"
 #include "espos_config.h"
 #include "espos_event.h"
+#include "espos_net.h"
 #include "espos_cfg_keys.h"
 #include "espos_sk.h"
 #include "espos_sk_http.h"
@@ -54,6 +55,9 @@ static const char *TAG = "espos_ble";
 /* Defined with the scan-suspend pair further down; declared here because
  * espos_ble_start() subscribes it before that point. */
 static void on_portal_event(void *arg, esp_event_base_t base, int32_t id, void *data);
+static void net_hold(bool down);
+static SemaphoreHandle_t scan_mutex(void);
+static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *data);
 
 #define ADV_PATH "/signalk/v2/api/ble/gateway/advertisements"
 #define WS_PATH  "/signalk/v2/api/ble/gateway/ws"
@@ -119,6 +123,10 @@ static struct {
      * single PORTAL_DOWN would leave the count stuck above zero with the
      * scanner off for good. */
     bool portal_holds_scan;
+
+    /* The same, for "the station has no network": one hold however often
+     * NETWORK_DOWN and the startup check report it; see net_hold(). */
+    bool net_holds_scan;
 
     /* counters */
     uint32_t adv_received, adv_posted, post_ok, post_fail;
@@ -1058,13 +1066,30 @@ esp_err_t espos_ble_start(void)
      * would hand back the airtime it just took -- the portal is raised inside
      * espos_wifi_start(), which runs first, so this ordering is the normal
      * case on an unconfigured device rather than a corner. */
+    /* Before the scan decision, so a device still associating never arms the
+     * scanner only to suspend it a moment later. Subscribed first and checked
+     * second: an UP that lands in between is then either heard or already
+     * visible to espos_net_is_up(), never lost. */
+    if (espos_event_subscribe(ESPOS_EVENT_NETWORK_UP, on_net_event, NULL) == ESP_OK &&
+        espos_event_subscribe(ESPOS_EVENT_NETWORK_DOWN, on_net_event, NULL) == ESP_OK) {
+        net_hold(!espos_net_is_up());
+    } else {
+        espos_event_unsubscribe(ESPOS_EVENT_NETWORK_UP, on_net_event);
+        ESP_LOGW(TAG, "not watching the network; scanning while it is down");
+    }
+
+    /* Running and the scan decision change together under the scan mutex: a
+     * hold released between them (NETWORK_UP arriving now) would otherwise see
+     * a gateway not yet running, start nothing, and leave the scanner off. */
+    xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
+    g.running = true;
     if (g.scan_suspend_count == 0) {
         espos_ble_scan_start(g.active_scan, (uint16_t)g.scan_int, (uint16_t)g.scan_win);
     } else {
         ESP_LOGI(TAG, "not scanning yet: %s", "suspended before the gateway started");
     }
+    xSemaphoreGiveRecursive(scan_mutex());
 
-    g.running = true;
     g.task_exited = false;
     /* 8 KB by default: cJSON serialisation plus the HTTP helper's own frame
      * need real headroom, and a stack-protection fault here is a reboot loop
@@ -1125,6 +1150,28 @@ esp_err_t espos_ble_start(void)
  * callers may be an event handler that must not block. */
 static portMUX_TYPE s_suspend_lock = portMUX_INITIALIZER_UNLOCKED;
 
+/* Orders whole hold transitions -- flag, count and the scanner call -- where
+ * the spinlock above only guards the count. Without it a DOWN that has set
+ * its flag but not yet suspended can lose to an UP on another task: the UP
+ * resumes nothing, the DOWN then suspends, and the scanner stays off with the
+ * network up. Recursive because a hold takes it and then calls
+ * espos_ble_scan_suspend(), which takes it again. Every caller is a task (an
+ * event handler, espos_start(), provisioning), so blocking here is allowed.
+ * Created on first use: espos_core can take the portal hold before
+ * espos_ble_start() runs. */
+static StaticSemaphore_t s_scan_mutex_buf;
+static SemaphoreHandle_t s_scan_mutex;
+
+static SemaphoreHandle_t scan_mutex(void)
+{
+    taskENTER_CRITICAL(&s_suspend_lock);
+    if (s_scan_mutex == NULL) {
+        s_scan_mutex = xSemaphoreCreateRecursiveMutexStatic(&s_scan_mutex_buf);
+    }
+    taskEXIT_CRITICAL(&s_suspend_lock);
+    return s_scan_mutex;
+}
+
 /* The portal is ONE holder of the scan suspension, however many times we are
  * told about it: the event fires for later transitions, and espos_start()
  * checks at boot because the portal is raised inside espos_wifi_start(),
@@ -1136,18 +1183,19 @@ void espos_ble_portal_hold(bool up)
     /* Test-and-set under the same lock as the count: the event and the
      * startup catch-up can land on different tasks, and two "portal is up"
      * arriving at once must still take exactly one hold. */
+    xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
     taskENTER_CRITICAL(&s_suspend_lock);
     bool changed = (up != g.portal_holds_scan);
     g.portal_holds_scan = up;
     taskEXIT_CRITICAL(&s_suspend_lock);
-    if (!changed) {
-        return;
+    if (changed) {
+        if (up) {
+            espos_ble_scan_suspend("setup portal is up (shared radio)");
+        } else {
+            espos_ble_scan_resume();
+        }
     }
-    if (up) {
-        espos_ble_scan_suspend("setup portal is up (shared radio)");
-    } else {
-        espos_ble_scan_resume();
-    }
+    xSemaphoreGiveRecursive(scan_mutex());
 }
 
 static void on_portal_event(void *arg, esp_event_base_t base, int32_t id, void *data)
@@ -1158,7 +1206,60 @@ static void on_portal_event(void *arg, esp_event_base_t base, int32_t id, void *
     espos_ble_portal_hold(id == ESPOS_EVENT_PORTAL_UP);
 }
 
+/* No network, no scanning: until the station has an address the gateway has
+ * nowhere to post, and the airtime belongs to the association.
+ *
+ * Measured on an ESP32-C5 (one radio, coexistence in software) with the
+ * default 160 ms window every 320 ms: every attempt to join failed with
+ * reason 36 after 20 s, four times in a row, and the station associated
+ * within 15 s of the setup portal suspending the scanner -- not because of
+ * the portal, but because the scan had stopped. A dropped link would take
+ * as long to come back. Same single-hold shape as the portal. */
+static void net_hold(bool down)
+{
+    xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
+    taskENTER_CRITICAL(&s_suspend_lock);
+    bool changed = (down != g.net_holds_scan);
+    g.net_holds_scan = down;
+    taskEXIT_CRITICAL(&s_suspend_lock);
+    if (changed) {
+        if (down) {
+            espos_ble_scan_suspend("no network yet (shared radio)");
+        } else {
+            espos_ble_scan_resume();
+        }
+    }
+    xSemaphoreGiveRecursive(scan_mutex());
+}
+
+static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    (void)base;
+    (void)data;
+    net_hold(id == ESPOS_EVENT_NETWORK_DOWN);
+}
+
+static esp_err_t scan_suspend_locked(const char *reason);
+static esp_err_t scan_resume_locked(void);
+
 esp_err_t espos_ble_scan_suspend(const char *reason)
+{
+    xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
+    esp_err_t err = scan_suspend_locked(reason);
+    xSemaphoreGiveRecursive(scan_mutex());
+    return err;
+}
+
+esp_err_t espos_ble_scan_resume(void)
+{
+    xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
+    esp_err_t err = scan_resume_locked();
+    xSemaphoreGiveRecursive(scan_mutex());
+    return err;
+}
+
+static esp_err_t scan_suspend_locked(const char *reason)
 {
     taskENTER_CRITICAL(&s_suspend_lock);
     unsigned before = g.scan_suspend_count++;
@@ -1173,7 +1274,7 @@ esp_err_t espos_ble_scan_suspend(const char *reason)
     return espos_ble_scan_stop();
 }
 
-esp_err_t espos_ble_scan_resume(void)
+static esp_err_t scan_resume_locked(void)
 {
     taskENTER_CRITICAL(&s_suspend_lock);
     bool held = g.scan_suspend_count > 0;
