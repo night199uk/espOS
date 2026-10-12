@@ -462,6 +462,17 @@ static void on_hosted_event(void *arg, esp_event_base_t base, int32_t id, void *
         esp_restart();
         break;
     case ESP_HOSTED_EVENT_CP_INIT:
+        /* Before the first beat this is the boot handshake, not a restart:
+         * the host resets the co-processor during transport bring-up and
+         * the init event can reach the loop only after this handler is
+         * registered. Restarting on it boot-looped a P4 panel, and on the
+         * first boot of an OTA image a restart before the confirm is a
+         * rollback. A co-processor that really resets this early sends no
+         * beat at all, and the timer armed at start catches that. */
+        if (!s_seen_beat) {
+            ESP_LOGI(TAG, "co-processor init event before the first heartbeat — boot handshake, ignored");
+            break;
+        }
         /* The co-processor restarted underneath us, so its heartbeat
          * config went with it and no beat will ever arrive again.
          *

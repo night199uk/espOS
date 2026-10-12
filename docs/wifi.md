@@ -224,6 +224,14 @@ enables the co-processor heartbeat (20 s) and watches for it. The
 heartbeat travels over the same RPC channel that dies, so its absence
 *is* the fault detector. After three missed beats the device restarts.
 
+A co-processor init event (`ESP_HOSTED_EVENT_CP_INIT`) after the first
+beat means the co-processor reset under a running host, and the device
+restarts at once. One before the first beat is the boot handshake: the
+host resets the co-processor during transport bring-up and that event can
+reach the loop after the watchdog registers, so it is ignored. Restarting
+on it boot-looped a P4 panel, and on the first boot of an OTA image any
+restart before the confirm rolls the update back.
+
 It starts automatically from `espos_wifi_start()`; there is nothing to
 call. On native-radio and simulator builds it compiles to a stub
 returning `ESP_ERR_NOT_SUPPORTED`. A non-OK return means wedges will not
