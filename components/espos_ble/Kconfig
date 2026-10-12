@@ -54,8 +54,9 @@ menu "espOS BLE gateway"
         help
             The gateway task never writes flash itself (espos_sk saves a
             TLS pin from an internal stack when the caller's is in PSRAM),
-            so its stack may live in PSRAM, which frees ESPOS_BLE_STACK_SIZE bytes of internal RAM. That
-            matters on a single-chip board such as the ESP32-C5, where BLE,
-            WiFi and the SignalK client share ~170 KB of internal RAM.
+            so its stack may live in PSRAM, which frees ESPOS_BLE_STACK_SIZE
+            bytes of internal RAM. That matters on a single-chip board such
+            as the ESP32-C5, where BLE, WiFi and the SignalK client share
+            ~170 KB of internal RAM.
 
 endmenu

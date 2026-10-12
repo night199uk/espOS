@@ -278,6 +278,18 @@ static bool cp_has_activate(void)
     return major > 2 || (major == 2 && minor >= 6);
 }
 
+/* FINISHED must arrive: espos_event_post() gives up after 50 ms on a full
+ * queue, and a subscriber that heard STARTED (the BLE gateway suspends its
+ * scan) would wait for the matching FINISHED until the next reboot. A failed
+ * install does not reboot, so retry for up to ~5 s; STARTED may be dropped, as
+ * a FINISHED nobody was waiting for is a no-op. */
+static void post_update_finished(void)
+{
+    for (int i = 0; i < 100 && espos_event_post(ESPOS_EVENT_UPDATE_FINISHED, NULL, 0) != ESP_OK; i++) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
 static void quiesce(bool on)
 {
     if (on == s_quiesced) {
@@ -292,7 +304,7 @@ static void quiesce(bool on)
         hook();
     }
     if (!on) {
-        (void)espos_event_post(ESPOS_EVENT_UPDATE_FINISHED, NULL, 0);
+        post_update_finished();
     }
 }
 

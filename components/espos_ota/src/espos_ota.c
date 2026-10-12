@@ -316,6 +316,18 @@ static bool coproc_busy(void)
     return espos_wifi_coproc_busy && espos_wifi_coproc_busy();
 }
 
+/* FINISHED must arrive: espos_event_post() gives up after 50 ms on a full
+ * queue, and a subscriber that heard STARTED (the BLE gateway suspends its
+ * scan) would wait for the matching FINISHED until the next reboot. A failed
+ * install does not reboot, so retry for up to ~5 s; STARTED may be dropped, as
+ * a FINISHED nobody was waiting for is a no-op. */
+static void post_update_finished(void)
+{
+    for (int i = 0; i < 100 && espos_event_post(ESPOS_EVENT_UPDATE_FINISHED, NULL, 0) != ESP_OK; i++) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
 static void do_install(const char *url)
 {
     bool insecure;
@@ -340,7 +352,7 @@ static void do_install(const char *url)
     espos_ota_quiesce_hook();
     esp_err_t err = espos_ota_port_install(url, insecure, info.project, progress_cb, NULL, err_text, sizeof(err_text));
     espos_ota_resume_hook();
-    (void)espos_event_post(ESPOS_EVENT_UPDATE_FINISHED, NULL, 0);
+    post_update_finished();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "install failed: %s", err_text);
         set_state(ESPOS_OTA_FAILED, err_text);
