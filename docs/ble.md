@@ -111,7 +111,7 @@ example's `sdkconfig.defaults.esp32c5` moves the Bluedroid host, small allocatio
 and TLS buffers out of internal RAM. The gateway task's own stack
 (`CONFIG_ESPOS_BLE_STACK_SIZE`) goes to PSRAM too, through
 `CONFIG_ESPOS_BLE_STACK_IN_PSRAM`, which defaults on when both `CONFIG_SPIRAM` and
-`CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM` are set. That configuration has been run on one
+`CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM` are set (except on the P4, which has internal RAM to spare). That configuration has been run on one
 Waveshare C5 board. Measurements and the caveats are in
 [hardware.md](hardware.md#the-esp32-c5-as-a-ble-gateway). The P4 is the target in
 daily use here; a C6, S3 or ESP32 builds and is expected to work but has not been
