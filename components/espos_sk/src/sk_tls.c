@@ -562,16 +562,10 @@ void espos_sk_tls_discard(void)
 
 static void store_task(void *arg)
 {
-    (void)arg;
-    /* Under the lock for the write too, as a direct commit is: a reset that
-     * lands between reading the anchor and writing it would otherwise be
-     * undone by this task writing the old one back. An empty anchor means a
-     * reset got there first and has already erased the record. */
-    lock();
-    if (s.anchor.kind != ESPOS_SK_TLS_ANCHOR_NONE) {
-        s.store_pending = anchor_store(&s.anchor) != ESP_OK;
-    }
-    unlock();
+    /* No lock() here: the committing task holds it and waits for this one,
+     * so nothing can change the anchor until the write is done. */
+    s.store_pending = anchor_store(&s.anchor) != ESP_OK;
+    xSemaphoreGive((SemaphoreHandle_t)arg);
     vTaskDelete(NULL);
 }
 
@@ -579,9 +573,9 @@ static void store_task(void *arg)
  * whichever task made the request, and an NVS write switches the cache, and
  * with it PSRAM, off: a caller whose stack is in PSRAM (the BLE gateway with
  * CONFIG_ESPOS_BLE_STACK_IN_PSRAM) would fault mid-write. Such a caller hands
- * the write to a short-lived task on an internal stack instead. The task reads
- * s.anchor when it runs, so a later commit can never be overwritten by an
- * older one. */
+ * the write to a short-lived task on an internal stack instead, and waits for
+ * it: a commit returns with the anchor in NVS either way, so a reboot straight
+ * after cannot leave the next connect to pin afresh. */
 static void persist_anchor(void)
 {
 #if CONFIG_SPIRAM
@@ -594,8 +588,17 @@ static void persist_anchor(void)
         s.store_pending = anchor_store(&s.anchor) != ESP_OK;
         return;
     }
-    s.store_pending = xTaskCreate(store_task, "espos_sktls", 4096, NULL, 5, NULL) != pdPASS;
-    if (s.store_pending) {
+    /* A semaphore rather than a task notification: the caller is whatever
+     * task made the request, and its notification value may be in use. */
+    SemaphoreHandle_t done = xSemaphoreCreateBinary();
+    if (done && xTaskCreate(store_task, "espos_sktls", 4096, done, 5, NULL) == pdPASS) {
+        (void)xSemaphoreTake(done, portMAX_DELAY);
+        vSemaphoreDelete(done);
+    } else {
+        if (done) {
+            vSemaphoreDelete(done);
+        }
+        s.store_pending = true;
         ESP_LOGW(TAG, "no memory to save the trust anchor now; retrying on the next connection");
     }
 }
