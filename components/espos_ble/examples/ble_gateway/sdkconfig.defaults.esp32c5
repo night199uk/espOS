@@ -30,3 +30,12 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 
 # NOT CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: with it the station never
 # associates on this part (reason 36 every ~21 s, docs/hardware.md).
+
+# The WiFi driver's static RX buffers are internal by necessity (~1.6 KB
+# each) and are the largest fixed block that can still shrink. 6, not the
+# default 10: equal to the block-ack window, as IDF recommends, and far more
+# than a gateway posting a few KB every 2 s needs. Measured with the control
+# WebSocket on: at 10, internal RAM sat at 15 KB free with a 7.2 KB low-water
+# mark (lowMemory and memoryTrough at warn); at 6, 22 KB free and 14.7 KB,
+# all conditions normal.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6

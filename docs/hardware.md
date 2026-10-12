@@ -67,6 +67,7 @@ else moves to PSRAM:
 | `CONFIG_SPIRAM=y` | turns the 8 MB on. It is not a bootloader option on the C5 (`esp_psram_init()` runs from `cpu_start.c`), so it ships by OTA |
 | `CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST`, `CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY` | the Bluedroid host heap, most of the 58 KB line above |
 | `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=256` | the default keeps every `malloc()` under 16 KB internal even with PSRAM on, which covers nearly all of cJSON, httpd and the SignalK client. 32 KB stays reserved for requests that ask for internal or DMA memory |
+| `CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6` | not a move but a trim: the driver's static RX buffers must be internal, and 6 (the block-ack window) instead of 10 frees 6.4 KB. A gateway posting a few KB every 2 s does not miss them |
 | `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC` | TLS record buffers, so a handshake stops needing 24 KB of contiguous internal RAM. `espos_sk`'s pre-flight measures PSRAM when this is set |
 
 `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP` stays **off**. With it, the station never
@@ -96,11 +97,14 @@ server:
 | BLE controller | `ESP_ERR_NO_MEM` | starts, scanning |
 | advertisement ring | 38 entries, internal | 500 entries, PSRAM |
 | WiFi associated after boot | ~1 s, no BLE | 16 s |
-| internal RAM free / low-water | — | 23.5 KB / 15.8 KB (alarm at 12 KB) |
+| internal RAM free / low-water, control WebSocket off | — | 23.5 KB / 15.8 KB (alarm at 12 KB) |
+| internal RAM free / low-water, control WebSocket on | — | 22.1 KB / 14.7 KB, with 6 static RX buffers (15 KB / 7.2 KB with 10) |
 | forwarded in the first 3 min | 0 | 1045 advertisements, 80 POSTs, 0 failed, 0 dropped |
 
-Not yet measured: GATT sessions (the control WebSocket was off on this board), a
-TLS server, and a multi-day soak. `memoryTrough` ([health.md](health.md)) is the
+Over 36 minutes with the control WebSocket off, five POSTs failed in one 8 s burst
+(`Failed to create socket`, then `wifi: m f null`) and recovered on their own. Not
+yet measured: an actual GATT session (the control WebSocket connects, but the
+server requested none during the test), a TLS server, and a multi-day soak. `memoryTrough` ([health.md](health.md)) is the
 condition to watch on a long run.
 
 ## Flash size and partition tables
