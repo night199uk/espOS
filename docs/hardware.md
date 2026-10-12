@@ -80,8 +80,8 @@ PSRAM, off, so a writing task with its stack in PSRAM crashes (dual-core targets
 assert first; the single-core C5 just faults). That rules out every task that can
 write NVS or flash: the web server (config, auth, core dump), OTA, the SignalK
 client, and the Bluetooth host. The BLE gateway's own task is the exception:
-a POST over TLS can pin the server's certificate, and `espos_sk` saves that pin
-from an internal stack when the caller's is in PSRAM. The gateway's
+a POST over TLS uses the server's pinned certificate, and `espos_sk` reads and
+saves that pin from an internal stack when the caller's is in PSRAM. The gateway's
 POST batch and upgrade headers (~7 KB) are data, not stack, and are allocated from
 PSRAM first.
 
