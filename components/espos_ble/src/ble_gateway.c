@@ -56,8 +56,13 @@ static const char *TAG = "espos_ble";
  * espos_ble_start() subscribes it before that point. */
 static void on_portal_event(void *arg, esp_event_base_t base, int32_t id, void *data);
 static void net_hold(bool down);
+static void ota_hold(bool busy);
 static SemaphoreHandle_t scan_mutex(void);
 static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *data);
+
+/* espos_ota is optional (a gateway can be updated over USB only), so a weak
+ * reference: NULL when it is not linked. */
+extern bool espos_ota_busy(void) __attribute__((weak));
 
 #define ADV_PATH "/signalk/v2/api/ble/gateway/advertisements"
 #define WS_PATH  "/signalk/v2/api/ble/gateway/ws"
@@ -127,6 +132,10 @@ static struct {
     /* The same, for "the station has no network": one hold however often
      * NETWORK_DOWN and the startup check report it; see net_hold(). */
     bool net_holds_scan;
+
+    /* And for "an update is downloading". Only gateway_task reads or writes
+     * it; see ota_hold(). */
+    bool ota_holds_scan;
 
     /* counters */
     uint32_t adv_received, adv_posted, post_ok, post_fail;
@@ -818,6 +827,11 @@ static void gateway_task(void *arg)
     int64_t next_post = 0, next_status = 0;
 
     while (g.running) {
+        /* First, ahead of the POST below: that can take seconds, and an
+         * update starting meanwhile should get the radio back as soon as
+         * this loop can notice. */
+        ota_hold(espos_ota_busy && espos_ota_busy());
+
         int64_t now = esp_timer_get_time();
         espos_sk_ws_status_t ws;
         bool sk_up = (espos_sk_ws_get_status(&ws) == ESP_OK) && ws.connected;
@@ -868,6 +882,7 @@ static void gateway_task(void *arg)
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
+    ota_hold(false);
     g.task_exited = true;
     vTaskDelete(NULL);
 }
@@ -1240,6 +1255,29 @@ static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *dat
     net_hold(id == ESPOS_EVENT_NETWORK_DOWN);
 }
 
+/* No scanning while espos_ota_busy(): an update queued, being checked for,
+ * downloading, verifying or about to reboot into. The image streams through
+ * the same radio, and through the WiFi and lwIP buffers that stay in internal
+ * RAM even with PSRAM on -- the RAM the scanner's advertisements and POSTs
+ * also churn. The C5 gateway idles near 22 KB of free internal RAM and
+ * already touches the 12 KB alarm with no update running. Polled from
+ * gateway_task rather than driven by an event: a dropped "finished" event
+ * after a failed install would leave the scanner off until the next reboot.
+ * The cost is a lag of up to one loop pass, a POST included, before the hold
+ * takes or lifts. Same single-hold shape as the portal and the network. */
+static void ota_hold(bool busy)
+{
+    if (busy == g.ota_holds_scan) {
+        return;
+    }
+    g.ota_holds_scan = busy;
+    if (busy) {
+        espos_ble_scan_suspend("update in progress (shared radio)");
+    } else {
+        espos_ble_scan_resume();
+    }
+}
+
 static esp_err_t scan_suspend_locked(const char *reason);
 static esp_err_t scan_resume_locked(void);
 
@@ -1310,8 +1348,12 @@ bool espos_ble_scan_is_suspended(void) { return g.scan_suspend_count > 0; }
 esp_err_t espos_ble_stop(void)
 {
     if (!g.running) return ESP_OK;
+    /* Under the scan mutex, so a hold being released on another task cannot
+     * pass its g.running check and restart the scanner after this stops it. */
+    xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
     g.running = false;
     espos_ble_scan_stop();
+    xSemaphoreGiveRecursive(scan_mutex());
 
     /* gateway_task polls g.running every 100 ms and deletes itself; wait for
      * it before freeing anything it touches. Wait on its own flag rather than
