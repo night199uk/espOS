@@ -171,6 +171,7 @@ Details, migrations and the descriptor format: [config.md](config.md).
 | `ESPOS_EVENT_SK_STREAM_CONNECTED` / `_DISCONNECTED` | `espos_sk` stream task, on every transition | — |
 | `ESPOS_EVENT_OTA_AVAILABLE` | `espos_ota`, manifest names a newer build | `espos_event_ota_t {version}` |
 | `ESPOS_EVENT_TIME_SYNCED` | `espos_time`, a source set the wall clock (every set, not only the first) | `espos_event_time_t {source, unix_ms}` |
+| `ESPOS_EVENT_UPDATE_STARTED` / `_FINISHED` | `espos_ota` around an install's download, and `espos_wifi` around a radio co-processor update; one FINISHED per STARTED, whether it succeeded or not. `espos_ble` suspends scanning in between | — |
 
 Events are notifications, not state: a subscriber that comes late asks the
 component's status API (`espos_net_get_status()`, `espos_wifi_get_status()`,

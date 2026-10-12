@@ -68,6 +68,7 @@ else moves to PSRAM:
 | `CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST`, `CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY` | the Bluedroid host heap, most of the 58 KB line above |
 | `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=256` | the default keeps every `malloc()` under 16 KB internal even with PSRAM on, which covers nearly all of cJSON, httpd and the SignalK client. 32 KB stays reserved for requests that ask for internal or DMA memory |
 | `CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6` | not a move but a trim: the driver's static RX buffers must be internal, and 6 (the block-ack window) instead of 10 frees 6.4 KB. A gateway posting a few KB every 2 s does not miss them |
+| `CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM`, `CONFIG_MDNS_MEMORY_ALLOC_SPIRAM` | the mDNS task stack and its allocations. The gateway task's 8 KB stack moves too, through `CONFIG_ESPOS_BLE_STACK_IN_PSRAM`, which defaults on when both `CONFIG_SPIRAM` and `CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM` are set (except on the P4, which has internal RAM to spare). Neither task touches flash: `espos_sk` reads and saves the TLS pin a gateway POST uses from an internal stack ([signalk.md](signalk.md)) |
 | `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC` | TLS record buffers, so a handshake stops needing 24 KB of contiguous internal RAM. `espos_sk`'s pre-flight measures PSRAM when this is set |
 
 `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP` stays **off**. With it, the station never
@@ -99,6 +100,7 @@ server:
 | WiFi associated after boot | ~1 s, no BLE | 16 s |
 | internal RAM free / low-water, control WebSocket off | — | 23.5 KB / 15.8 KB (alarm at 12 KB) |
 | internal RAM free / low-water, control WebSocket on | — | 22.1 KB / 14.7 KB, with 6 static RX buffers (15 KB / 7.2 KB with 10) |
+| the same, gateway task and mDNS in PSRAM | — | 34.7 KB free at steady state (+12.7 KB); low-water 15.8 KB, set during boot before those tasks exist |
 | forwarded in the first 3 min | 0 | 1045 advertisements, 80 POSTs, 0 failed, 0 dropped |
 
 Over 36 minutes with the control WebSocket off, five POSTs failed in one 8 s burst

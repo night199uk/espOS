@@ -544,6 +544,13 @@ the connection has proved itself — an HTTP status from the far end, or a
 WebSocket `101`. Every handshake starts by discarding whatever the last one
 left.
 
+The commit runs on whichever task made the request. When that task's stack is
+in PSRAM (the BLE gateway's can be), the NVS write goes to a short-lived task
+with an internal stack instead, and so does a retried load of the anchor after
+a failed one at boot: flash access switches the cache, and PSRAM with it, off,
+and a task whose stack vanishes mid-access faults. A save that fails is retried
+on the next commit.
+
 The anchor lives in the `skstate` NVS namespace next to the token
 (`tls_kind`, `tls_fp`, `tls_ca`, `tls_san`, `tls_cn`, `tls_self`, `tls_at`):
 device state, so it does not travel with a configuration export. `sk.ca_pem`

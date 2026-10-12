@@ -42,9 +42,13 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#if CONFIG_SPIRAM
+#include "esp_memory_utils.h"
+#endif
 #include "mbedtls/md.h"
 #include "mbedtls/oid.h"
 #include "mbedtls/ssl.h"
@@ -108,6 +112,7 @@ static struct {
     SemaphoreHandle_t handshake; /* one TLS handshake at a time, device-wide */
     bool loaded;
     anchor_t anchor;
+    bool store_pending; /* s.anchor differs from NVS: a deferred write failed to start */
     capture_t cap;
     espos_sk_tls_trust_t trust;
     char ca_pem[CONFIG_ESPOS_SK_TLS_CA_MAX]; /* trust == CA: the operator's anchor, PEM */
@@ -434,6 +439,8 @@ static int verify_cb(void *ctx, mbedtls_x509_crt *crt, int depth, uint32_t *flag
 
 /* -------------------------------------------------------------- public API */
 
+static inline bool run_on_internal_stack(void (*fn)(void));
+
 static void ensure_init(void)
 {
     if (!s.lock) {
@@ -443,8 +450,10 @@ static void ensure_init(void)
         s.handshake = hs;
         mbedtls_x509_crt_init(&s.ca_crt);
     }
+    /* Normally done at boot; a retry after a failed open can come from a
+     * task whose stack is in PSRAM. */
     if (!s.loaded) {
-        anchor_load();
+        (void)run_on_internal_stack(anchor_load);
     }
 }
 
@@ -474,7 +483,7 @@ void espos_sk_tls_set_trust(espos_sk_tls_trust_t trust, const char *ca_pem)
             /* No SAN yet: the CA does not name the server. The first
              * successful connect binds the leaf's set (commit below). */
             s.anchor = a;
-            (void)anchor_store(&a);
+            s.store_pending = anchor_store(&a) != ESP_OK;
             ESP_LOGI(TAG, "CA supplied by configuration: anchored on %s", a.cn[0] ? a.cn : "(no CN)");
         }
     }
@@ -555,6 +564,72 @@ void espos_sk_tls_discard(void)
     unlock();
 }
 
+/* NVS access switches the cache, and with it PSRAM, off: a caller whose stack
+ * is in PSRAM (the BLE gateway with CONFIG_ESPOS_BLE_STACK_IN_PSRAM) would
+ * fault mid-access. espos_sk calls run on whichever task made the request, so
+ * such a caller hands the NVS work to a short-lived task on an internal stack
+ * and waits for it. Returns false if that task could not be started. Without
+ * PSRAM it is a plain call: the C5's image sits close to its size budget. */
+#if CONFIG_SPIRAM
+typedef struct {
+    void (*fn)(void);
+    SemaphoreHandle_t done;
+} nvs_job_t;
+
+static void nvs_job_task(void *arg)
+{
+    nvs_job_t *job = arg;
+    /* No lock() here: the caller waits for this task, and when it holds the
+     * lock nothing can change the anchor until the work is done. */
+    job->fn();
+    xSemaphoreGive(job->done);
+    vTaskDelete(NULL);
+}
+
+static bool run_on_internal_stack(void (*fn)(void))
+{
+    int probe = 0; /* only its address is used */
+    if (!esp_ptr_external_ram(&probe)) {
+        fn();
+        return true;
+    }
+    /* A semaphore rather than a task notification: the caller is whatever
+     * task made the request, and its notification value may be in use. */
+    nvs_job_t job = { .fn = fn, .done = xSemaphoreCreateBinary() };
+    bool ran = job.done && xTaskCreate(nvs_job_task, "espos_sktls", 4096, &job, 5, NULL) == pdPASS;
+    if (ran) {
+        (void)xSemaphoreTake(job.done, portMAX_DELAY);
+    }
+    if (job.done) {
+        vSemaphoreDelete(job.done);
+    }
+    return ran;
+}
+#else
+static inline bool run_on_internal_stack(void (*fn)(void))
+{
+    fn();
+    return true;
+}
+#endif
+
+static void store_anchor(void)
+{
+    s.store_pending = anchor_store(&s.anchor) != ESP_OK;
+}
+
+/* Called with the lock held, s.anchor already updated. Waits for the write
+ * even when it is handed off: a commit returns with the anchor in NVS either
+ * way, so a reboot straight after cannot leave the next connect to pin
+ * afresh. */
+static void persist_anchor(void)
+{
+    if (!run_on_internal_stack(store_anchor)) {
+        s.store_pending = true;
+        ESP_LOGW(TAG, "no memory to save the trust anchor now; retrying on the next connection");
+    }
+}
+
 void espos_sk_tls_commit(const char *server_self)
 {
     ensure_init();
@@ -595,11 +670,14 @@ void espos_sk_tls_commit(const char *server_self)
     }
     memset(&s.cap, 0, sizeof(s.cap));
     if (!changed) {
+        if (s.store_pending) {
+            persist_anchor();
+        }
         unlock();
         return;
     }
     s.anchor = a;
-    (void)anchor_store(&a);
+    persist_anchor();
     unlock();
     ESP_LOGI(TAG, "pinned the server's %s%s%s", a.kind == ESPOS_SK_TLS_ANCHOR_CA ? "CA" : "certificate",
              a.cn[0] ? " for " : "", a.cn);
@@ -612,6 +690,7 @@ esp_err_t espos_sk_tls_reset(void)
     lock();
     memset(&s.anchor, 0, sizeof(s.anchor));
     memset(&s.cap, 0, sizeof(s.cap));
+    s.store_pending = false;
     s.last_error[0] = '\0';
     anchor_erase();
     unlock();
