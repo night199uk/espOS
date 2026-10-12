@@ -922,7 +922,7 @@ esp_err_t espos_ble_start(void)
         s_scratch = heap_caps_malloc_prefer(sizeof(*s_scratch), 2, MALLOC_CAP_SPIRAM,
                                             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         if (!s_scratch) {
-            ESP_LOGE(TAG, "no memory for the %u B POST scratch", (unsigned)sizeof(*s_scratch));
+            ESP_LOGE(TAG, "no memory for the %u B gateway scratch", (unsigned)sizeof(*s_scratch));
             return ESP_ERR_NO_MEM;
         }
     }
