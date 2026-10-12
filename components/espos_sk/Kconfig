@@ -52,7 +52,7 @@ menu "espOS SignalK"
     config ESPOS_SK_WS_TASK_STACK
         int "SignalK stream task stack size (bytes)"
         default 10240
-        range 6144 16384
+        range 8192 16384
         help
             The websocket task: frame reassembly, delta parsing, inbound PUT
             dispatch and the notification sink.
@@ -68,15 +68,13 @@ menu "espOS SignalK"
             It also carries the deeper HTTP work than its name suggests:
             reconcile_meta() runs here, and it issues espos_sk_http_get_meta()
             and espos_sk_http_put_meta() per path -- over TLS on a wss server.
-            That path was not exercised in the measurement either (plain HTTP),
-            so 2920 B of observed headroom is the floor of what it needs, not a
-            budget to spend.
+            That path was not exercised in either measurement (plain HTTP), so
+            the 6904 B peak is a floor of what it needs, not a budget to spend.
 
-            The floor is 6144 rather than the 4096 a stack option would
-            normally allow, because 4096 is BELOW the 5272 B this task was
-            measured using -- an option whose range lets a build fault on the
-            first big frame is a trap, not a choice. 6144 leaves the knob
-            useful on a tight board while staying above what was observed.
+            The floor is 8192 rather than the 4096 a stack option would
+            normally allow, because it is the smallest round size above the
+            6904 B this task was measured using -- an option whose range lets a
+            build fault on the first big frame is a trap, not a choice.
 
     config ESPOS_SK_TLS
         bool "Talk to the server over TLS (https/wss)"

@@ -650,14 +650,14 @@ advertises `_signalk-https._tcp`.
 
 ## Task stacks
 
-Two tasks, two Kconfig options. Both are at their historical sizes; what changed
-is that they are now options with measured numbers behind them rather than
-literals in the source.
+Two tasks, two Kconfig options, each with measured numbers behind its default.
+The client task is at its historical size; the stream task was raised after the
+second measurement below.
 
 * **`CONFIG_ESPOS_SK_TASK_STACK`** (default 12288, range 6144–16384) — the client
   task: discovery, the token state machine and its HTTP legs (access request,
   poll, verify), plus the https probe.
-* **`CONFIG_ESPOS_SK_WS_TASK_STACK`** (default 10240, range 6144–16384) — the
+* **`CONFIG_ESPOS_SK_WS_TASK_STACK`** (default 10240, range 8192–16384) — the
   stream task: frame reassembly, delta parsing, inbound PUT dispatch, the
   notification sink — and metadata reconciliation, which issues an HTTP GET and
   PUT per path (`reconcile_meta()` is called from `ws_task()`, not from the
@@ -686,8 +686,8 @@ left 1.3 KB between it and a stack-protection reboot loop -- before any TLS. Its
 default is now 10240. The client task's peak nearly tripled too, which is the
 argument above for not lowering its default, made by the data.
 
-**Neither default was lowered on the strength of that, and the reason is worth
-stating.** The server in that run was plain HTTP on port 80, so no TLS handshake
+**Neither default was lowered on the strength of the headroom either run left,
+and the reason is worth stating.** The server in that run was plain HTTP on port 80, so no TLS handshake
 completed on either task — and mbedTLS is the deepest call path both of them
 have. A 12 % high-water reading taken with the deepest path never taken does not
 show the stack is oversized; it shows the measurement was incomplete.
@@ -703,9 +703,10 @@ lowering either default depends on the build:
   build does support instead: a reconnect that replays a full subscription burst
   and reconciles meta for every published path.
 
-The floors are 6144 on both. 4096 would sit *below* the 5272 B the stream task was
-measured using, and an option whose range lets a build fault on the first large
-frame is a trap rather than a choice. A stack-protection fault here is a reboot
+The floors are 6144 for the client task and 8192 for the stream task, the
+smallest round sizes above what each was measured using (4280 B and 6904 B). An
+option whose range lets a build fault on the first large frame is a trap rather
+than a choice. A stack-protection fault here is a reboot
 loop, not a degraded mode.
 
 ## API
