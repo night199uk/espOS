@@ -40,6 +40,18 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # all conditions normal.
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
 
+# WiFi library code back to flash. On the C5 code and data share one SRAM,
+# so every KB of IRAM the driver claims for speed is a KB less heap. IDF puts
+# these four in IRAM by default on a WiFi 6 part (IRAM_OPT >10 KB, RX >17 KB,
+# EXTRA >5 KB, SLP ~7 KB per their Kconfig help); the cost of moving them is
+# throughput, which a gateway posting a few KB every 2 s does not use. IDF
+# itself turns the first two off for BT + PSRAM on the ESP32 for the same
+# reason. Interrupt handlers stay in IRAM either way.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_ESP_WIFI_EXTRA_IRAM_OPT=n
+CONFIG_ESP_WIFI_SLP_IRAM_OPT=n
+
 # mDNS's task stack and its own allocations in PSRAM as well: neither touches
 # flash, and it is internal RAM this part is short of.
 CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM=y
