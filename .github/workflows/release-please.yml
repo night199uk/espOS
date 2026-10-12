@@ -141,6 +141,8 @@ jobs:
     # Pushes the regenerated lock to the release branch.
     permissions:
       contents: write
+      # gh pr list, to find the open release PR when release-please did not run.
+      pull-requests: read
     steps:
       # release-please names the branch when it ran; otherwise look for an open
       # release PR's branch. None (no release pending, or the release PR just
@@ -154,9 +156,14 @@ jobs:
         run: |
           set -euo pipefail
           name="$FROM_RP"
-          if [ -z "$name" ] && gh api "repos/$GITHUB_REPOSITORY/branches/$DEFAULT" --silent 2>/dev/null; then
+          if [ -z "$name" ]; then
+            # An open PR from the branch implies the branch exists, so no
+            # separate branch lookup. Any API failure (403, 429, 5xx) fails the
+            # step through set -e rather than passing for "no release PR".
             open=$(gh pr list -R "$GITHUB_REPOSITORY" --head "$DEFAULT" --state open --json number --jq length)
-            [ "$open" -gt 0 ] && name="$DEFAULT"
+            if [ "$open" -gt 0 ]; then
+              name="$DEFAULT"
+            fi
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
           [ -n "$name" ] || echo "No open release PR; nothing to regenerate."
