@@ -48,7 +48,7 @@ dependencies:
     - esp32s31
     version: 3.3.13
   espressif/esp-sr:
-    component_hash: 698154c0a94f6c8ac3e1ac669ec3ea741e6f848022b0f89030eddb23f3a31e14
+    component_hash: f828073fa761cfa88c6d97e2c664d233b29c6d8b77e1a35b2fbe306fc5dc1108
     dependencies:
     - name: espressif/cjson
       registry_url: https://components.espressif.com
@@ -74,7 +74,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 2.5.5
+    version: 2.6.0
   espressif/esp_new_jpeg:
     component_hash: e1e7e6991193c41ed6c9fc386702aa7821433319e7aa9c3147cd3236310cd69c
     dependencies: []
@@ -371,6 +371,6 @@ direct_dependencies:
 - signalk-espos/espos_sk_flow
 - signalk-espos/espos_time
 - signalk-espos/espos_wifi
-manifest_hash: 6df726606c4883c490073ca620aa21f3d2ae97601ea11e94130f4cd4c7298fc2
+manifest_hash: 8aaf0555d8bf0be9b4c81500ea60e294e376bed6c85b310b4e05440db7bde056
 target: esp32s3
 version: 3.0.0
