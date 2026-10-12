@@ -5,7 +5,7 @@ idf_build_get_property(target IDF_TARGET)
 # ble_proto.c is pure logic and builds anywhere (it is what test/host exercises);
 # everything else needs a Bluetooth stack, which the linux target has not got.
 set(srcs src/ble_proto.c)
-set(priv_reqs espressif__cjson espos_event)
+set(priv_reqs espressif__cjson espos_event espos_net)
 
 # Target, not CONFIG_BT_BLUEDROID_ENABLED: component CMakeLists are evaluated
 # during early expansion, before sdkconfig exists, so a CONFIG_ guard here is

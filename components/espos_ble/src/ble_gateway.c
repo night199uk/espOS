@@ -42,6 +42,7 @@
 #include "espos_ble.h"
 #include "espos_config.h"
 #include "espos_event.h"
+#include "espos_net.h"
 #include "espos_cfg_keys.h"
 #include "espos_sk.h"
 #include "espos_sk_http.h"
@@ -54,6 +55,8 @@ static const char *TAG = "espos_ble";
 /* Defined with the scan-suspend pair further down; declared here because
  * espos_ble_start() subscribes it before that point. */
 static void on_portal_event(void *arg, esp_event_base_t base, int32_t id, void *data);
+static void net_hold(bool down);
+static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *data);
 
 #define ADV_PATH "/signalk/v2/api/ble/gateway/advertisements"
 #define WS_PATH  "/signalk/v2/api/ble/gateway/ws"
@@ -119,6 +122,10 @@ static struct {
      * single PORTAL_DOWN would leave the count stuck above zero with the
      * scanner off for good. */
     bool portal_holds_scan;
+
+    /* The same, for "the station has no network": one hold however often
+     * NETWORK_DOWN and the startup check report it; see net_hold(). */
+    bool net_holds_scan;
 
     /* counters */
     uint32_t adv_received, adv_posted, post_ok, post_fail;
@@ -1058,6 +1065,18 @@ esp_err_t espos_ble_start(void)
      * would hand back the airtime it just took -- the portal is raised inside
      * espos_wifi_start(), which runs first, so this ordering is the normal
      * case on an unconfigured device rather than a corner. */
+    /* Before the scan decision, so a device still associating never arms the
+     * scanner only to suspend it a moment later. Subscribed first and checked
+     * second: an UP that lands in between is then either heard or already
+     * visible to espos_net_is_up(), never lost. */
+    if (espos_event_subscribe(ESPOS_EVENT_NETWORK_UP, on_net_event, NULL) == ESP_OK &&
+        espos_event_subscribe(ESPOS_EVENT_NETWORK_DOWN, on_net_event, NULL) == ESP_OK) {
+        net_hold(!espos_net_is_up());
+    } else {
+        espos_event_unsubscribe(ESPOS_EVENT_NETWORK_UP, on_net_event);
+        ESP_LOGW(TAG, "not watching the network; scanning while it is down");
+    }
+
     if (g.scan_suspend_count == 0) {
         espos_ble_scan_start(g.active_scan, (uint16_t)g.scan_int, (uint16_t)g.scan_win);
     } else {
@@ -1156,6 +1175,39 @@ static void on_portal_event(void *arg, esp_event_base_t base, int32_t id, void *
     (void)base;
     (void)data;
     espos_ble_portal_hold(id == ESPOS_EVENT_PORTAL_UP);
+}
+
+/* No network, no scanning: until the station has an address the gateway has
+ * nowhere to post, and the airtime belongs to the association.
+ *
+ * Measured on an ESP32-C5 (one radio, coexistence in software) with the
+ * default 160 ms window every 320 ms: every attempt to join failed with
+ * reason 36 after 20 s, four times in a row, and the station associated
+ * within 15 s of the setup portal suspending the scanner -- not because of
+ * the portal, but because the scan had stopped. A dropped link would take
+ * as long to come back. Same single-hold shape as the portal. */
+static void net_hold(bool down)
+{
+    taskENTER_CRITICAL(&s_suspend_lock);
+    bool changed = (down != g.net_holds_scan);
+    g.net_holds_scan = down;
+    taskEXIT_CRITICAL(&s_suspend_lock);
+    if (!changed) {
+        return;
+    }
+    if (down) {
+        espos_ble_scan_suspend("no network yet (shared radio)");
+    } else {
+        espos_ble_scan_resume();
+    }
+}
+
+static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    (void)base;
+    (void)data;
+    net_hold(id == ESPOS_EVENT_NETWORK_DOWN);
 }
 
 esp_err_t espos_ble_scan_suspend(const char *reason)
