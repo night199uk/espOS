@@ -46,7 +46,9 @@
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#if CONFIG_SPIRAM
 #include "esp_memory_utils.h"
+#endif
 #include "mbedtls/md.h"
 #include "mbedtls/oid.h"
 #include "mbedtls/ssl.h"
@@ -582,8 +584,13 @@ static void store_task(void *arg)
  * older one. */
 static void persist_anchor(void)
 {
+#if CONFIG_SPIRAM
     int probe;
-    if (esp_ptr_internal(&probe)) {
+    bool stack_external = esp_ptr_external_ram(&probe);
+#else
+    bool stack_external = false;
+#endif
+    if (!stack_external) {
         s.store_pending = anchor_store(&s.anchor) != ESP_OK;
         return;
     }
