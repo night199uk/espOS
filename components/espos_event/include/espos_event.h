@@ -55,7 +55,15 @@ typedef enum {
      * joining the portal take minutes, or fail. data: none */
     ESPOS_EVENT_PORTAL_UP = 12,
     ESPOS_EVENT_PORTAL_DOWN = 13,
-    ESPOS_EVENT_MAX = 14,
+    /* A firmware image is downloading -- this chip's (espos_ota) or a radio
+     * co-processor's -- and has finished, successfully or not. One FINISHED
+     * per STARTED. Posted beside espos_ota_quiesce_hook()/resume_hook(), for
+     * work that wants out of the way but is not the hook's one owner: a BLE
+     * scan competes with the download for airtime and internal RAM. A
+     * successful install reboots shortly after FINISHED. data: none */
+    ESPOS_EVENT_UPDATE_STARTED = 14,
+    ESPOS_EVENT_UPDATE_FINISHED = 15,
+    ESPOS_EVENT_MAX = 16,
 } espos_event_id_t;
 
 /* ESPOS_EVENT_NETWORK_UP */

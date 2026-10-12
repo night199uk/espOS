@@ -47,4 +47,14 @@ menu "espOS BLE gateway"
             here is a reboot loop rather than a degraded mode, hence the
             headroom.
 
+    config ESPOS_BLE_STACK_IN_PSRAM
+        bool "Put the gateway task's stack in PSRAM"
+        depends on SPIRAM && FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+        default y
+        help
+            The gateway task never touches flash, so its stack may live in
+            PSRAM, which frees ESPOS_BLE_STACK_SIZE bytes of internal RAM. That
+            matters on a single-chip board such as the ESP32-C5, where BLE,
+            WiFi and the SignalK client share ~170 KB of internal RAM.
+
 endmenu

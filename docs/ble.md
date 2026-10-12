@@ -121,6 +121,13 @@ on a single shared radio a 50 % scan duty cycle can stop the association
 completing. On the C5 above, every join failed with reason 36 until the scanner
 stopped.
 
+**No scanning during a firmware update.** The same kind of hold covers an OTA
+download and a radio co-processor update. espOS posts `ESPOS_EVENT_UPDATE_STARTED`
+and `_FINISHED` around both, and the gateway scans again afterwards, whether the
+update failed or not. A download needs airtime and internal RAM, and the scan
+spends both; missing advertisements for the length of a download is cheaper than
+a failed update.
+
 **ESP32-P4**: no radio at all. Bluedroid's HCI is routed at an ESP32-C6
 co-processor over esp_hosted's SDIO transport (`CONFIG_ESP_HOSTED_HOST_FEAT_BT`
 plus the IDF stack you already select, `CONFIG_BT_BLUEDROID_ENABLED`, with

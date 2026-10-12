@@ -58,6 +58,7 @@ static void on_portal_event(void *arg, esp_event_base_t base, int32_t id, void *
 static void net_hold(bool down);
 static SemaphoreHandle_t scan_mutex(void);
 static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *data);
+static void on_update_event(void *arg, esp_event_base_t base, int32_t id, void *data);
 
 #define ADV_PATH "/signalk/v2/api/ble/gateway/advertisements"
 #define WS_PATH  "/signalk/v2/api/ble/gateway/ws"
@@ -127,6 +128,9 @@ static struct {
     /* The same, for "the station has no network": one hold however often
      * NETWORK_DOWN and the startup check report it; see net_hold(). */
     bool net_holds_scan;
+
+    /* And for "a firmware image is downloading"; see update_hold(). */
+    bool update_holds_scan;
 
     /* counters */
     uint32_t adv_received, adv_posted, post_ok, post_fail;
@@ -869,7 +873,11 @@ static void gateway_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     g.task_exited = true;
+#if CONFIG_ESPOS_BLE_STACK_IN_PSRAM
+    vTaskDeleteWithCaps(NULL);
+#else
     vTaskDelete(NULL);
+#endif
 }
 
 /* ---------------------------------------------------------------- */
@@ -1077,6 +1085,13 @@ esp_err_t espos_ble_start(void)
         espos_event_unsubscribe(ESPOS_EVENT_NETWORK_UP, on_net_event);
         ESP_LOGW(TAG, "not watching the network; scanning while it is down");
     }
+    /* No catch-up: nothing downloads before the gateway starts. Half a
+     * subscription would suspend on STARTED and never hear FINISHED. */
+    if (espos_event_subscribe(ESPOS_EVENT_UPDATE_STARTED, on_update_event, NULL) != ESP_OK ||
+        espos_event_subscribe(ESPOS_EVENT_UPDATE_FINISHED, on_update_event, NULL) != ESP_OK) {
+        espos_event_unsubscribe(ESPOS_EVENT_UPDATE_STARTED, on_update_event);
+        ESP_LOGW(TAG, "not watching firmware updates; scanning through them");
+    }
 
     /* Running and the scan decision change together under the scan mutex: a
      * hold released between them (NETWORK_UP arriving now) would otherwise see
@@ -1095,7 +1110,18 @@ esp_err_t espos_ble_start(void)
      * need real headroom, and a stack-protection fault here is a reboot loop
      * rather than a degraded mode. The big scratch buffers are static (see
      * s_post_batch) so this covers the call depth, not the payloads. */
-    if (xTaskCreate(gateway_task, "espos_ble", CONFIG_ESPOS_BLE_STACK_SIZE, NULL, 5, &g.task) != pdPASS) {
+#if CONFIG_ESPOS_BLE_STACK_IN_PSRAM
+    /* In PSRAM where the board has it: this task never touches flash (config
+     * is read above, on the caller's task; an unauthorised POST is reported to
+     * espos_sk as a queued command), so its stack is never needed while the
+     * cache is off, and 8 KB of internal RAM is a lot on a part that has
+     * ~170 KB of it. */
+    BaseType_t created = xTaskCreateWithCaps(gateway_task, "espos_ble", CONFIG_ESPOS_BLE_STACK_SIZE, NULL, 5,
+                                             &g.task, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    BaseType_t created = xTaskCreate(gateway_task, "espos_ble", CONFIG_ESPOS_BLE_STACK_SIZE, NULL, 5, &g.task);
+#endif
+    if (created != pdPASS) {
         g.running = false;
         espos_ble_scan_stop();
         vSemaphoreDelete(g.lock);
@@ -1238,6 +1264,38 @@ static void on_net_event(void *arg, esp_event_base_t base, int32_t id, void *dat
     (void)base;
     (void)data;
     net_hold(id == ESPOS_EVENT_NETWORK_DOWN);
+}
+
+/* No scanning while a firmware image downloads. The scan takes half the
+ * airtime on a shared radio, and every advertisement it hands up costs
+ * internal RAM on the way to a POST -- the two things a multi-megabyte
+ * download needs most. On an ESP32-C5 internal RAM sits ~10 KB above the
+ * alarm with the gateway running, and the OTA task's own 8 KB stack comes out
+ * of the same pool. Advertisements missed for the length of a download are
+ * not worth a failed update. Same single-hold shape as the others. */
+static void update_hold(bool running)
+{
+    xSemaphoreTakeRecursive(scan_mutex(), portMAX_DELAY);
+    taskENTER_CRITICAL(&s_suspend_lock);
+    bool changed = (running != g.update_holds_scan);
+    g.update_holds_scan = running;
+    taskEXIT_CRITICAL(&s_suspend_lock);
+    if (changed) {
+        if (running) {
+            espos_ble_scan_suspend("firmware update downloading");
+        } else {
+            espos_ble_scan_resume();
+        }
+    }
+    xSemaphoreGiveRecursive(scan_mutex());
+}
+
+static void on_update_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    (void)base;
+    (void)data;
+    update_hold(id == ESPOS_EVENT_UPDATE_STARTED);
 }
 
 static esp_err_t scan_suspend_locked(const char *reason);

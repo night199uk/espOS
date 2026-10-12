@@ -62,6 +62,7 @@
 
 #include "coproc_image.h"
 
+#include "espos_event.h"
 #include "espos_httpd.h"
 
 static const char *TAG = "espos_coproc";
@@ -283,9 +284,15 @@ static void quiesce(bool on)
         return;
     }
     s_quiesced = on;
+    if (on) {
+        (void)espos_event_post(ESPOS_EVENT_UPDATE_STARTED, NULL, 0);
+    }
     void (*hook)(void) = on ? espos_ota_quiesce_hook : espos_ota_resume_hook;
     if (hook) {
         hook();
+    }
+    if (!on) {
+        (void)espos_event_post(ESPOS_EVENT_UPDATE_FINISHED, NULL, 0);
     }
 }
 

@@ -336,9 +336,11 @@ static void do_install(const char *url)
         return;
     }
     char err_text[96] = "";
+    (void)espos_event_post(ESPOS_EVENT_UPDATE_STARTED, NULL, 0);
     espos_ota_quiesce_hook();
     esp_err_t err = espos_ota_port_install(url, insecure, info.project, progress_cb, NULL, err_text, sizeof(err_text));
     espos_ota_resume_hook();
+    (void)espos_event_post(ESPOS_EVENT_UPDATE_FINISHED, NULL, 0);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "install failed: %s", err_text);
         set_state(ESPOS_OTA_FAILED, err_text);

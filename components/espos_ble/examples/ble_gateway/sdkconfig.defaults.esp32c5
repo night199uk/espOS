@@ -39,3 +39,8 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # mark (lowMemory and memoryTrough at warn); at 6, 22 KB free and 14.7 KB,
 # all conditions normal.
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
+
+# mDNS's task stack and its own allocations in PSRAM as well: neither touches
+# flash, and it is internal RAM this part is short of.
+CONFIG_MDNS_TASK_CREATE_FROM_SPIRAM=y
+CONFIG_MDNS_MEMORY_ALLOC_SPIRAM=y
