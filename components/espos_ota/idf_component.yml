@@ -3,7 +3,7 @@
 ## espos_ota component manifest: registry metadata for signalk-espos/espos_ota.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.18.0"
+version: "0.18.1"
 # x-release-please-end
 description: "Signed OTA with rollback, from a URL or a version manifest"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_ota"
@@ -47,23 +47,23 @@ dependencies:
   # from the registry has no such directory and the field is ignored there.
   signalk-espos/espos_config:
     # x-release-please-start-version
-    version: "^0.18.0"
+    version: "^0.18.1"
     # x-release-please-end
     override_path: "../espos_config"
   signalk-espos/espos_httpd:
     # x-release-please-start-version
-    version: "^0.18.0"
+    version: "^0.18.1"
     # x-release-please-end
     override_path: "../espos_httpd"
   signalk-espos/espos_net:
     # x-release-please-start-version
-    version: "^0.18.0"
+    version: "^0.18.1"
     # x-release-please-end
     override_path: "../espos_net"
   # cJSON, exact-pinned like every other registry dependency here.
   espressif/cjson: "==1.7.19~2"
   signalk-espos/espos_event:
     # x-release-please-start-version
-    version: "^0.18.0"
+    version: "^0.18.1"
     # x-release-please-end
     override_path: "../espos_event"

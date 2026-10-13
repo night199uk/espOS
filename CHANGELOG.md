@@ -15,6 +15,17 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.18.1 (2026-10-12)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Fixed
+* fix(wifi): ignore the co-processor's boot init event in the link watchdog by @dirkwa in https://github.com/signalk-espOS/espOS/pull/217
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.18.0...v0.18.1
+
 ## 0.18.0 (2026-10-12)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
