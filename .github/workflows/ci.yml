@@ -481,6 +481,8 @@ jobs:
     name: board variant keeps espOS's defaults
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:

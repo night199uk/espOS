@@ -107,10 +107,9 @@ espos_project_ui_partition()
   `espos/sdkconfig.d/espos.defaults` (IDF appends the `.<target>` sibling
   itself), the optional profile (`PROFILE release` on the call, or
   `-DESPOS_PROFILE=release` on the command line, which wins), your
-  `sdkconfig.defaults` (and its `.<target>`), your git-ignored
-  `sdkconfig.local`, any files named in
-  `-DESPOS_EXTRA_SDKCONFIG_DEFAULTS=a;b` (a board variant, say), then a
-  generated fragment that selects the partition table. Your
+  `sdkconfig.defaults` (and its `.<target>`), any files named in
+  `-DESPOS_EXTRA_SDKCONFIG_DEFAULTS=a;b` (a board variant, say), your
+  git-ignored `sdkconfig.local`, then a generated fragment that selects the partition table. Your
   `sdkconfig.defaults` holds only what differs from espOS — a BLE gateway's is
   the Bluetooth stack and nothing else. An explicit `-DSDKCONFIG_DEFAULTS=a;b`
   replaces the assembled list, espOS's signed-update settings included (only
