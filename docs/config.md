@@ -166,9 +166,12 @@ that moves on every register and unregister).
 
 ### NVS capacity
 
-The `nvs` partition is 48K in every `components/espos_core/partitions/*.csv` — twelve 4096-byte
-pages, 126 entries of 32 bytes each. A realistic graph of **8 nodes with 3 parameters
-each plus one 250-point curve table** costs, measured by
+The `nvs` partition is 128K in every `components/espos_core/partitions/*.csv` — thirty-two
+4096-byte pages, 126 entries of 32 bytes each. Devices first flashed with
+espOS 0.18 or older keep the 48K (twelve pages) they were flashed with, because
+an OTA never resizes a partition, so the budget below is measured against 48K.
+A realistic graph of **8 nodes with 3 parameters each plus one 250-point
+curve table** costs, measured by
 `test/host/espos_config_test` ("a realistic graph's NVS footprint is
 reported"):
 
