@@ -32,7 +32,7 @@ Server → Connections → Add, then:
 
 * type **NMEA 2000**, source **IP gateway** (`n2k-ip-gateway-canboatjs`)
 * format **candump3**
-* host: the device's address, port **2233**
+* host: the device's address, port **2599**
   (`CONFIG_ESPOS_N2K_CANDUMP_PORT`)
 
 The device also advertises `_sensesp-n2k._tcp` over mDNS, so it is findable
