@@ -9,7 +9,7 @@
  * decoding changes far more often than firmware should, so canboat owns it on
  * the server and this stays a pipe. Add the device in signalk-server as an
  * "NMEA 2000 IP gateway" with format `candump3`, pointing at this device's
- * address on port 2233.
+ * address on port 2599.
  *
  * WIRING IS THE PART THAT GOES WRONG. A CAN bus needs a transceiver — the
  * ESP32's TWAI peripheral is TTL and cannot drive a differential pair — and
