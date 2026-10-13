@@ -443,11 +443,20 @@ jobs:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets:
       signing_key: ${{ secrets.SIGNING_KEY_PEM }}
+      dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}   # optional
+      dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}      # optional
 ```
 
 Pin a release tag, not `@main`: the workflow receives your signing key. The
 key is passed by name because `secrets: inherit` does not reach a workflow in
 another organisation.
+
+The two Docker Hub values are optional. With both, the build pulls the ESP-IDF
+image logged in rather than anonymously; anonymous pulls are rate limited per
+runner address, and that allowance is shared with every other job on the
+runner. Both are secrets of the called workflow so the username can come from
+a variable or a secret, whichever the repository keeps it in. A failed login
+falls back to the anonymous pull.
 
 **What it produces.** Per build, `<name>-<board>-<tag>-merged.bin` for a cable
 and `<name>-<board>-<tag>-ota.bin` for an update, where `<board>` is the

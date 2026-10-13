@@ -24,6 +24,8 @@
 #         tag: ${{ needs.release-please.outputs.tag_name }}
 #       secrets:
 #         signing_key: ${{ secrets.SIGNING_KEY_PEM }}
+#         dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+#         dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
 #
 # Called once the release exists: release-please creates it with the workflow
 # token, which starts no other workflow, so its caller passes the tag.
@@ -93,6 +95,13 @@ on:
         description: >-
           PEM of the app-signing key. Required for a release unless the
           repository variable ESPOS_ALLOW_UNSIGNED_RELEASE is true.
+        required: false
+      dockerhub_username:
+        description: >-
+          Docker Hub user for the ESP-IDF image pull; see build-firmware.yml.
+        required: false
+      dockerhub_token:
+        description: "Docker Hub access token for dockerhub_username"
         required: false
 
 permissions:
@@ -215,6 +224,8 @@ jobs:
       esptool: ${{ inputs.esptool }}
     secrets:
       signing_key: ${{ secrets.signing_key }}
+      dockerhub_username: ${{ secrets.dockerhub_username }}
+      dockerhub_token: ${{ secrets.dockerhub_token }}
 
   publish:
     needs: [plan, build]
