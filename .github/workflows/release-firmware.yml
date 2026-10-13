@@ -34,6 +34,7 @@
 #
 # Assets are <name>-<segment>-<tag>-merged.bin and -ota.bin, one pair per
 # build; the segment is the build's board, or its target when it names none.
+# A build with flash_tables adds -merged-<size>.bin per flash size.
 # Tags must be plain vX.Y.Z. A beta is such a tag with GitHub's prerelease
 # flag: a suffix like -rc1 is read by the registry as part of the file name.
 #
@@ -63,7 +64,9 @@ on:
         description: >-
           JSON array, one object per image: {"target": "esp32c6"}, plus for a
           board variant "board" (the asset segment, lowercase letters and
-          digits) and "sdkconfig_defaults" (the variant's defaults file).
+          digits) and "sdkconfig_defaults" (the variant's defaults file), and
+          "flash_tables" for extra full-flash images per flash size
+          (build-firmware.yml's input of that name).
         type: string
         required: true
       tag:
@@ -161,8 +164,8 @@ jobs:
               fail("builds must be a non-empty JSON array")
           matrix, seen = [], set()
           for b in builds:
-              if not isinstance(b, dict) or set(b) - {"target", "board", "sdkconfig_defaults"}:
-                  fail(f"builds entry {b!r}: keys are target, board, sdkconfig_defaults")
+              if not isinstance(b, dict) or set(b) - {"target", "board", "sdkconfig_defaults", "flash_tables"}:
+                  fail(f"builds entry {b!r}: keys are target, board, sdkconfig_defaults, flash_tables")
               target = b.get("target", "")
               if target not in TARGETS:
                   fail(f"builds entry {b!r}: unknown target '{target}'")
@@ -178,7 +181,11 @@ jobs:
               for part in filter(None, defaults.split(";")):
                   if part.startswith("/") or ".." in part.split("/"):
                       fail(f"sdkconfig_defaults '{part}' must be a path inside the project")
-              matrix.append({"target": target, "segment": segment, "defaults": defaults})
+              tables = b.get("flash_tables", "")
+              if not isinstance(tables, str) or not re.fullmatch(r"[A-Za-z0-9._/= -]*", tables):
+                  fail(f"flash_tables {tables!r}: space-separated SIZE or SIZE=CSV entries")
+              matrix.append({"target": target, "segment": segment, "defaults": defaults,
+                             "tables": tables})
 
           print(f"mode={'release' if tag else 'backfill'}")
           print(f"tag={tag}")
@@ -221,6 +228,7 @@ jobs:
       artifact: firmware-${{ matrix.segment }}
       require: ${{ inputs.require }}
       sdkconfig_defaults: ${{ matrix.defaults }}
+      flash_tables: ${{ matrix.tables }}
       esptool: ${{ inputs.esptool }}
     secrets:
       signing_key: ${{ secrets.signing_key }}
@@ -280,7 +288,7 @@ jobs:
               cp dist/*.bin "staged/$t/"
             else
               gh release download "$t" --repo "$REPO" --dir "staged/$t" \
-                --pattern '*-merged.bin' --pattern '*-ota.bin'
+                --pattern '*-merged.bin' --pattern '*-merged-*.bin' --pattern '*-ota.bin'
             fi
             compgen -G "staged/$t/*-merged.bin" >/dev/null ||
               { echo "::error::$t has no -merged.bin image"; exit 1; }

@@ -621,6 +621,32 @@ this build. Merging without it would still yield a bootable image -- which
 is exactly why this is an error rather than a warning.
 ```
 
+### One image per flash size
+
+`flash_tables` (an input of `build-firmware.yml`, and a key of each
+`release-firmware.yml` build) lays the same build out for more partition
+tables, so a board with 4, 8 or 16 MB gets a full-flash image of its own
+without another compile:
+
+```yaml
+    builds: >-
+      [{"target": "esp32c6", "flash_tables": "8mb 16mb"},
+       {"target": "esp32p4", "flash_tables": "16mb=partitions-16mb.csv"}]
+```
+
+A bare size names espOS's bundled table (`components/espos_core/partitions`);
+`SIZE=CSV` names one of the project's own. Each becomes
+`<name>-<segment>-<tag>-merged-<size>.bin` next to the usual `-merged.bin`,
+which the registry lists per flash size. `tools/espos_merge_firmware.py
+--table <csv> --flash-size <size>` does the work: it moves the app and data
+images to the new table's partitions by name, resizes LittleFS images to
+their new partition and writes the flash size into the bootloader header.
+It fails the build when the app does not fit every app slot of a table
+(the OTA image is the same file for every size), when `nvs` would shrink or
+disappear, or when a non-LittleFS data partition changes size.
+[Hardware](hardware.md#choosing-a-table-one-per-flash-size-never-one-per-board)
+says which tables to offer.
+
 ## Starting a new firmware
 
 There is no template repository to keep in step. A release is the starting

@@ -82,8 +82,16 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      # The flash-size variant test runs end to end with what a release uses:
+      # pinned littlefs-python and esptool, and gen_esp32part.py from the
+      # pinned IDF.
       - name: release window and mirror tools
-        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
+        run: |
+          pip install --quiet "littlefs-python==0.19.0" "esptool==4.8.1"
+          curl -fsSL -o "$RUNNER_TEMP/gen_esp32part.py" \
+            "https://raw.githubusercontent.com/espressif/esp-idf/$(cat .idf-version)/components/partition_table/gen_esp32part.py"
+          ESPOS_GEN_ESP32PART="$RUNNER_TEMP/gen_esp32part.py" \
+            python3 -m unittest discover -s tools -p 'test_*.py' -v
 
   # Prose names CONFIG_ESPOS_* knobs the compiler never sees, so a renamed or
   # never-landed symbol leaves the docs pointing at nothing (signalk.md once

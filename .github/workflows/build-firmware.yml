@@ -77,6 +77,16 @@ on:
         description: "esptool version for the merge"
         type: string
         default: "4.8.1"
+      flash_tables:
+        description: >-
+          Extra full-flash images, one per flash size, from this same build:
+          space-separated SIZE or SIZE=CSV entries, e.g. "4mb 8mb" for
+          espOS's bundled tables or "8mb=partitions-8mb.csv" for the
+          project's own. Each becomes <name>-<version>-merged-<size>.bin
+          beside the usual -merged.bin. The OTA image is the same for every
+          size, so a table whose app slots it does not fit fails the build.
+        type: string
+        default: ""
       tag:
         description: >-
           The release tag being built. Required from a workflow_call, because
@@ -180,7 +190,9 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .espos-workflow
-          sparse-checkout: tools
+          sparse-checkout: |
+            tools
+            components/espos_core/partitions
           persist-credentials: false
 
       # The pin lives in the repository, not here, so a consumer that has not
@@ -397,16 +409,68 @@ jobs:
       - name: merge the flash images
         env:
           REQUIRE: ${{ inputs.require }}
+          TABLES: ${{ inputs.flash_tables }}
         run: |
           pip install --quiet "esptool==${{ inputs.esptool }}"
           merge="tools/espos_merge_firmware.py"
           [ -f "$merge" ] || merge="espos/tools/espos_merge_firmware.py"
           [ -f "$merge" ] || merge=".espos-workflow/tools/espos_merge_firmware.py"
+          # The per-size images need this workflow's merge tool, so the usual
+          # image comes from the same one rather than an older submodule copy.
+          [ -z "$TABLES" ] || merge=".espos-workflow/tools/espos_merge_firmware.py"
           args=""
           for r in $REQUIRE; do args="$args --require $r"; done
           # shellcheck disable=SC2086
           python "$merge" --build-dir build --chip "${{ inputs.target }}" \
             --out merged.bin $args
+
+      # Nothing is rebuilt: the flash size is the bootloader header's and the
+      # table is its own image, so one build serves every size (see
+      # tools/espos_flash_variant.py). gen_esp32part.py comes from the IDF
+      # release the project builds with, so it reads tables the way that
+      # build's bootloader does.
+      - name: one full-flash image per flash size
+        if: inputs.flash_tables != ''
+        env:
+          TABLES: ${{ inputs.flash_tables }}
+          REQUIRE: ${{ inputs.require }}
+          IDF_VERSION: ${{ steps.idf.outputs.version }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          pip install --quiet "littlefs-python==0.19.0"
+          case "$IDF_VERSION" in
+            *[!A-Za-z0-9._-]*) echo "::error::unexpected IDF version '$IDF_VERSION'"; exit 1 ;;
+          esac
+          curl -fsSL -o "$RUNNER_TEMP/gen_esp32part.py" \
+            "https://raw.githubusercontent.com/espressif/esp-idf/$IDF_VERSION/components/partition_table/gen_esp32part.py"
+          args=()
+          for r in $REQUIRE; do args+=(--require "$r"); done
+          seen=" "
+          # No globbing: an entry is a path to check, not a pattern.
+          set -f
+          for entry in $TABLES; do
+            size="${entry%%=*}"
+            size="${size,,}"
+            if [[ "$entry" == *=* ]]; then
+              csv="${entry#*=}"
+              case "/$csv/" in
+                //*|*/../*) echo "::error::flash_tables: '$csv' must be a path inside the project"; exit 1 ;;
+              esac
+            else
+              csv=".espos-workflow/components/espos_core/partitions/$size.csv"
+            fi
+            [[ "$size" =~ ^[0-9]+mb$ ]] || { echo "::error::flash_tables: '$entry' is not SIZE or SIZE=CSV"; exit 1; }
+            [[ "$seen" != *" $size "* ]] || { echo "::error::flash_tables: $size given twice"; exit 1; }
+            seen="$seen$size "
+            [ -f "$csv" ] || { echo "::error::flash_tables: no table '$csv'"; exit 1; }
+            echo "::group::$size from $csv"
+            python .espos-workflow/tools/espos_merge_firmware.py --build-dir build \
+              --chip "$TARGET" --out "merged-$size.bin" --table "$csv" \
+              --flash-size "$size" --gen-esp32part "$RUNNER_TEMP/gen_esp32part.py" \
+              "${args[@]}"
+            echo "::endgroup::"
+          done
 
       # Also on a workflow_call: a caller driven by release-please IS a release,
       # and gating on the `release` event alone meant the reusable workflow
@@ -432,6 +496,11 @@ jobs:
           esac
           mkdir -p dist
           cp merged.bin "dist/${NAME}-${VERSION}-merged.bin"
+          for f in merged-*mb.bin; do
+            [ -e "$f" ] || continue
+            size="${f#merged-}"
+            cp "$f" "dist/${NAME}-${VERSION}-merged-${size}"
+          done
           # The app image on its own is what a device fetches for an OTA; the
           # merged one is for a cable. Both, because they are not the same
           # file and picking the wrong one fails confusingly.

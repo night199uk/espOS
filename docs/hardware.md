@@ -140,6 +140,48 @@ with its own table sets `CONFIG_ESPTOOLPY_FLASHSIZE_*` in its own defaults.
 CI's size report fails the build when the app grows past 90 % of its slot
 (`tools/espos_size_diff.py`).
 
+### Choosing a table: one per flash size, never one per board
+
+A board needs a table for its flash size, not a table of its own. Three
+facts make that work:
+
+* **Nothing in the app depends on the table.** The firmware finds its
+  partitions by name, and the flash size it uses is read from the
+  bootloader's header, which esptool rewrites at merge time. One build per
+  chip therefore serves every flash size: the release workflow's
+  `flash_tables` input lays the same build out once per table
+  ([Releasing](releasing.md#one-image-per-flash-size)).
+* **The table is fixed at the first USB flash.** An OTA update writes only
+  the idle app slot. It never touches the table, `nvs` (settings, WiFi, the
+  Signal K token, keys), `nvs_keys` or `storage`, so everything a device
+  knows survives every update.
+* **The update image is the same file on every board.** It has to fit the
+  smallest app slot of every table that was ever offered for that chip, so
+  a table only helps the boards flashed with it, and a too-small table
+  limits the firmware for as long as those boards are in the field.
+
+So:
+
+1. Offer espOS's bundled table for each flash size the firmware fits, and
+   pick the largest for a known board: a 16 MB board gets `16mb.csv`, never
+   `4mb.csv`. Small slots are the expensive mistake, because only a USB
+   reflash moves a device to a bigger table.
+2. Leave a table out where the app would fill more than about 90 % of its
+   slots, and declare the smallest size in the registry (`flashMinBytes`).
+   The BLE gateway's 2.1 MB ESP32-C6 image is why it offers no 4 MB image.
+3. Boards with more than 16 MB use the 16 MB table. Flash above 16 MB needs
+   32-bit addressing, which ESP-IDF refuses on the first ESP32-P4 revision
+   (v0.x) and calls high-risk on the ESP32-C6, and no espOS firmware is near
+   a 6.5 MB slot.
+4. Bring your own table only for a partition espOS's lack (a wake-word
+   model, a layout store). Keep `nvs` at least 48 KB, keep any non-LittleFS
+   data partition the same size in every table, and give each flash size its
+   own CSV (`flash_tables: "8mb=partitions-8mb.csv"`).
+
+Resizing a table over the air is possible in ESP-IDF, but a power cut while
+the table is rewritten leaves a board that only a USB flash revives. espOS
+does not do it.
+
 ## ESP32-P4 and the C6 co-processor
 
 The ESP32-P4 has no radio. On the boards espOS is developed on — the
