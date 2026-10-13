@@ -5,13 +5,15 @@
 # slots in after storage. A project needing more (its own NVS namespace as a
 # partition, a model at a historical offset) brings its own table and passes
 # it as PARTITIONS.
-# nvs is 48K, not the 24K espOS shipped through v0.7: a graph node stores its
-# settings here, and a curve table is one string key that can approach 4 KB on
-# its own, so a handful of nodes with tables would fill the old partition. The
-# size is fixed at flash time -- growing it later needs a USB flash, not an
-# OTA -- so it is set before any device ships tables rather than after.
+# nvs is 128K: settings, WiFi, the Signal K token and keys, plus graph
+# nodes, whose calibration curve tables are one string key of up to ~4 KB
+# each. Through v0.7 it was 24K, then 48K, which a measured graph fills to
+# one page of twelve. The size is fixed at the first USB flash -- an OTA
+# never grows it -- so it is set generously while few devices exist, and
+# every bundled table carries the same size: a firmware whose settings fit
+# on one board must fit them on all of them.
 # Name,     Type, SubType,  Offset,  Size,   Flags
-nvs,        data, nvs,      ,        48K,
+nvs,        data, nvs,      ,        128K,
 otadata,    data, ota,      ,        8K,
 phy_init,   data, phy,      ,        4K,
 nvs_keys,   data, nvs_keys, ,        4K,    encrypted

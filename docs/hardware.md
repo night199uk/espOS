@@ -128,12 +128,13 @@ the flash size with it (`espos_project_prologue(PARTITIONS "${ESPOS_PARTITIONS_D
 
 | Table | Flash | App slots (`ota_0`, `ota_1`) | `storage` (LittleFS: web UI + your files) | Fits |
 |---|---|---|---|---|
-| `components/espos_core/partitions/4mb.csv` (default) | 4 MB | 2 × 1728 KB | 384 KB | the core, Signal K, OTA — the getting-started device |
-| `components/espos_core/partitions/8mb.csv` | 8 MB | 2 × 3 MB | 1792 KB | a native-radio target with Bluedroid: the BLE gateway measures 2.13 MB on an ESP32-C6, which does **not** fit a 1728 KB slot |
+| `components/espos_core/partitions/4mb.csv` (default) | 4 MB | 2 × 1728 KB | 320 KB | the core, Signal K, OTA — the getting-started device |
+| `components/espos_core/partitions/8mb.csv` | 8 MB | 2 × 3 MB | 1728 KB | a native-radio target with Bluedroid: the BLE gateway measures 2.13 MB on an ESP32-C6, which does **not** fit a 1728 KB slot |
 | `components/espos_core/partitions/16mb.csv` | 16 MB | 2 × 6656 KB | 1792 KB | LVGL + esp-sr + hosted WiFi/BLE on the P4 panels; 1 MB left for the esp-sr model partition (commented out in the CSV) |
 
-All three carry `nvs` (48 KB — configuration, WiFi credentials, the Signal K
-token), `otadata`, `phy_init`, `nvs_keys` (for NVS encryption in a release
+All three carry `nvs` (128 KB — configuration, WiFi credentials, the Signal K
+token, graph nodes and their curve tables; devices first flashed with
+espOS 0.18 or older keep the 48 KB they were flashed with, since an OTA never resizes it), `otadata`, `phy_init`, `nvs_keys` (for NVS encryption in a release
 build, [Security](security.md)) and a 64 KB `coredump` partition. A project
 with its own table sets `CONFIG_ESPTOOLPY_FLASHSIZE_*` in its own defaults.
 `esptool.py flash_id` reports the flash size of a board you are unsure about.

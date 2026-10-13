@@ -164,13 +164,15 @@ generate the partition and flash it to the `nvs` offset:
 
 ```sh
 printf 'key,type,encoding,value\nwifi,namespace,,\nssid0,data,string,MyBoat\npsk0,data,string,secret\n' > wifi.nvs.csv
-python -m esp_idf_nvs_partition_gen generate wifi.nvs.csv wifi.nvs.bin 0xc000
+python -m esp_idf_nvs_partition_gen generate wifi.nvs.csv wifi.nvs.bin 0x20000
 esptool.py --port /dev/ttyACM0 write_flash 0x9000 wifi.nvs.bin
 ```
 
 `config_version` need not be present — the store stamps it on first boot.
-The size argument is the `nvs` partition's size, 48K (`0xc000`) in the
-shipped tables; a project with its own partition table passes its own.
+The size argument is the `nvs` partition's size, 128K (`0x20000`) in the
+shipped tables; a project with its own partition table passes its own. A
+board first flashed with espOS 0.18 or older keeps the 48K (`0xc000`) it was
+flashed with: pass that there, or the image runs over the partitions after it.
 
 ## Status document
 
