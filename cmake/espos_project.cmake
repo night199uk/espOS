@@ -242,6 +242,7 @@ endfunction()
 #   <espos>/sdkconfig.d/espos.defaults          the base every firmware shares
 #   <espos>/sdkconfig.d/<profile>.defaults      PROFILE / -DESPOS_PROFILE, optional
 #   <project>/sdkconfig.defaults                the project's own, if present
+#   -DESPOS_EXTRA_SDKCONFIG_DEFAULTS=a;b        extra files, e.g. a board variant
 #   <project>/sdkconfig.local                   git-ignored developer overrides
 #   <build>/espos_partitions.defaults           generated from PARTITIONS
 #
@@ -262,7 +263,25 @@ endfunction()
 # defaults files (a list without it would silently fall back to IDF's
 # single-app table and every OTA slot would be gone).
 #
+# ESPOS_EXTRA_SDKCONFIG_DEFAULTS is how to ADD files without that: a board
+# variant passed as -DSDKCONFIG_DEFAULTS would replace espos.defaults and with
+# it the signed-update settings, and the image would install over USB and be
+# refused by every OTA after. The extras win over espOS's and the project's
+# defaults; a developer's sdkconfig.local still has the last word.
+#
 function(_espos_sdkconfig_defaults name profile partitions)
+    set(extras)
+    foreach(extra IN LISTS ESPOS_EXTRA_SDKCONFIG_DEFAULTS)
+        get_filename_component(extra "${extra}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+        # Refused here, naming the variable, rather than left to IDF: a typo
+        # in a board name must not get as far as building some other board.
+        if(NOT EXISTS "${extra}")
+            message(FATAL_ERROR "${name}: ESPOS_EXTRA_SDKCONFIG_DEFAULTS names ${extra}, which does not exist.")
+        endif()
+        list(APPEND extras "${extra}")
+        message(STATUS "${name}: extra sdkconfig defaults ${extra}")
+    endforeach()
+
     if(SDKCONFIG_DEFAULTS)
         set(defaults "${SDKCONFIG_DEFAULTS}")
         message(STATUS "${name}: SDKCONFIG_DEFAULTS given explicitly — not adding espOS's defaults")
@@ -286,6 +305,10 @@ function(_espos_sdkconfig_defaults name profile partitions)
         endif()
 
         foreach(base sdkconfig.defaults sdkconfig.local)
+            if(base STREQUAL "sdkconfig.local")
+                list(APPEND defaults ${extras})
+                set(extras)
+            endif()
             if(EXISTS "${CMAKE_SOURCE_DIR}/${base}")
                 list(APPEND defaults "${CMAKE_SOURCE_DIR}/${base}")
             elseif(IDF_TARGET AND EXISTS "${CMAKE_SOURCE_DIR}/${base}.${IDF_TARGET}")
@@ -296,6 +319,9 @@ function(_espos_sdkconfig_defaults name profile partitions)
             endif()
         endforeach()
     endif()
+
+    # Still set only for an explicit list, which has no sdkconfig.local slot.
+    list(APPEND defaults ${extras})
 
     # Partition table → one generated fragment. The path is absolute because
     # IDF resolves a relative CONFIG_PARTITION_TABLE_CUSTOM_FILENAME against

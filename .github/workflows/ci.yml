@@ -473,6 +473,36 @@ jobs:
           target: esp32p4
           command: scripts/build_example.sh components/espos_ble/examples/ble_gateway esp32p4
 
+  # A board variant has to add to espOS's defaults, not replace them: passed
+  # as SDKCONFIG_DEFAULTS it once dropped the signed-update settings, and the
+  # image would have installed over USB and refused every OTA after.
+  # build-firmware.yml hands variants to the prologue this way.
+  variant-defaults:
+    name: board variant keeps espOS's defaults
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: read pinned IDF version
+        id: idf
+        run: echo "version=$(cat .idf-version)" >> "$GITHUB_OUTPUT"
+      - name: write a variant
+        run: echo "CONFIG_LOG_DEFAULT_LEVEL_WARN=y" > sdkconfig.board.test
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ steps.idf.outputs.version }}
+          target: esp32c6
+          command: >-
+            idf.py -DSDKCONFIG=build/sdkconfig
+            -DESPOS_EXTRA_SDKCONFIG_DEFAULTS=sdkconfig.board.test reconfigure
+      - name: the variant and espOS's signed updates both landed
+        run: |
+          for want in CONFIG_LOG_DEFAULT_LEVEL_WARN=y CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y; do
+            grep -qxF "$want" build/sdkconfig || { echo "::error::$want missing from build/sdkconfig"; exit 1; }
+          done
+
   host-tests:
     name: host tests (linux target)
     runs-on: ubuntu-latest
