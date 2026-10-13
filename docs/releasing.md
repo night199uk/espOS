@@ -473,8 +473,17 @@ name.
          {"target": "esp32p4", "board": "x7", "sdkconfig_defaults": "sdkconfig.board.x7"}]
 ```
 
-The files are applied after `sdkconfig.defaults` through `SDKCONFIG_DEFAULTS`,
-which a project without the prologue honours.
+A project on the prologue gets the files as `ESPOS_EXTRA_SDKCONFIG_DEFAULTS`,
+applied after espOS's defaults and its own `sdkconfig.defaults` (a developer's
+`sdkconfig.local` still wins), so every variant keeps espOS's signed-update
+settings. A project without the prologue gets them after its
+`sdkconfig.defaults` through `SDKCONFIG_DEFAULTS`. After the build the workflow
+checks that every `CONFIG_` line of the variant's files is in the result and
+stops otherwise, which is also what happens with an espOS submodule too old to
+know the variable. Build a variant locally the same way:
+`idf.py -DESPOS_EXTRA_SDKCONFIG_DEFAULTS=sdkconfig.board.x7 build`, after
+deleting `sdkconfig` (defaults reach a fresh one only) and in a build directory
+per board (the variable stays in its CMake cache).
 
 **The mirror.** GitHub serves release downloads without the CORS header a web
 page needs, so the images are also published to a `release-assets` branch of

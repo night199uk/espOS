@@ -111,9 +111,9 @@ on:
         description: >-
           Extra sdkconfig defaults files, `;`-separated and relative to the
           project, applied after sdkconfig.defaults -- how one project builds
-          one image per board variant. Passed as SDKCONFIG_DEFAULTS, which a
-          project without espOS's prologue honours; a project with the
-          prologue selects variants through sdkconfig.local instead.
+          one image per board variant. A project on espOS's prologue gets
+          them as ESPOS_EXTRA_SDKCONFIG_DEFAULTS, after espOS's defaults and
+          its own; one without the prologue gets them in SDKCONFIG_DEFAULTS.
         type: string
         default: ""
     secrets:
@@ -312,8 +312,20 @@ jobs:
             esac
             [ -f "$f" ] || { echo "::error::sdkconfig_defaults: no file '$f'"; exit 1; }
           done
-          echo "command=idf.py -D SDKCONFIG_DEFAULTS=\"sdkconfig.defaults;$DEFAULTS\" build" \
-            >> "$GITHUB_OUTPUT"
+          # A project on espOS's prologue gets the files ADDED to espOS's
+          # defaults. Passed as SDKCONFIG_DEFAULTS they would replace them,
+          # signed-update settings included: an image that installs over USB
+          # and is refused by every OTA after. Which of the two to use is a
+          # guess from the source, so a step after the build checks it.
+          if grep -qsE '^[[:space:]]*espos_project_prologue[[:space:]]*\(' CMakeLists.txt; then
+            echo "command=idf.py -D ESPOS_EXTRA_SDKCONFIG_DEFAULTS=\"$DEFAULTS\" build" \
+              >> "$GITHUB_OUTPUT"
+          else
+            # IDF refuses a listed file that does not exist.
+            [ -f sdkconfig.defaults ] && DEFAULTS="sdkconfig.defaults;$DEFAULTS"
+            echo "command=idf.py -D SDKCONFIG_DEFAULTS=\"$DEFAULTS\" build" \
+              >> "$GITHUB_OUTPUT"
+          fi
 
       # Anonymous pulls of the ESP-IDF image are rate limited per runner
       # address, so a release could fail on a pull another repository's job
@@ -332,6 +344,55 @@ jobs:
           esp_idf_version: ${{ steps.idf.outputs.version }}
           target: ${{ inputs.target }}
           command: ${{ steps.cmd.outputs.command }}
+
+      # Two ways a variant build goes wrong without failing: an espOS older
+      # than ESPOS_EXTRA_SDKCONFIG_DEFAULTS ignores it and every variant comes
+      # out the same, and a project whose prologue call the step above missed
+      # got SDKCONFIG_DEFAULTS, which drops espOS's own defaults.
+      - name: check the board variant took effect
+        if: inputs.sdkconfig_defaults != ''
+        env:
+          DEFAULTS: ${{ inputs.sdkconfig_defaults }}
+          COMMAND: ${{ steps.cmd.outputs.command }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          if [ -f build/espos_partitions.defaults ] && [[ "$COMMAND" == *" SDKCONFIG_DEFAULTS="* ]]; then
+            echo "::error::this project runs espOS's prologue, but the build passed SDKCONFIG_DEFAULTS, which replaces espOS's defaults (signed updates included); call espos_project_prologue() from the root CMakeLists.txt"
+            exit 1
+          fi
+          # Only the partition fragment comes after the variant files, so the
+          # value each key has in the last of them that sets it must be in the
+          # result, in the form Kconfig writes it (an option turned off is a
+          # comment).
+          declare -A want from
+          IFS=';' read -ra files <<< "$DEFAULTS"
+          for f in "${files[@]}"; do
+            # IDF reads <file>.<target> right after <file>.
+            layers=("$f")
+            [ -f "$f.$TARGET" ] && layers+=("$f.$TARGET")
+            for layer in "${layers[@]}"; do
+              while IFS= read -r line; do
+                line=${line%$'\r'}
+                if [[ "$line" =~ ^(CONFIG_[A-Za-z0-9_]+)=n$ ]] ||
+                   [[ "$line" =~ ^#\ (CONFIG_[A-Za-z0-9_]+)\ is\ not\ set$ ]]; then
+                  key=${BASH_REMATCH[1]}
+                  want[$key]="# $key is not set"
+                elif [[ "$line" =~ ^(CONFIG_[A-Za-z0-9_]+)= ]]; then
+                  key=${BASH_REMATCH[1]}
+                  want[$key]=$line
+                else
+                  continue
+                fi
+                from[$key]=$layer
+              done < "$layer"
+            done
+          done
+          for key in "${!want[@]}"; do
+            grep -qxF -- "${want[$key]}" sdkconfig || {
+              echo "::error::${from[$key]} sets '${want[$key]}', which is not in the built sdkconfig. An espOS older than ESPOS_EXTRA_SDKCONFIG_DEFAULTS ignores the variant (bump the submodule), or the option depends on one that is off."
+              exit 1
+            }
+          done
 
       - name: merge the flash images
         env:
