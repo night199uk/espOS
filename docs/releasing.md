@@ -636,8 +636,11 @@ without another compile:
 
 A bare size names espOS's bundled table (`components/espos_core/partitions`);
 `SIZE=CSV` names one of the project's own. Each becomes
-`<name>-<segment>-<tag>-merged-<size>.bin` next to the usual `-merged.bin`,
-which the registry lists per flash size. `tools/espos_merge_firmware.py
+`<name>-<segment>-<tag>-merged-<size>.bin` next to the usual `-merged.bin`.
+The registry indexes them per flash size from registry #26 on, and the
+manager's flasher picks the one that fits the chip from
+signalk-espos-manager #66 on; before that they are plain release assets.
+`tools/espos_merge_firmware.py
 --table <csv> --flash-size <size>` does the work: it moves the app and data
 images to the new table's partitions by name, resizes LittleFS images to
 their new partition and writes the flash size into the bootloader header.
