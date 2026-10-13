@@ -354,6 +354,7 @@ jobs:
         env:
           DEFAULTS: ${{ inputs.sdkconfig_defaults }}
           COMMAND: ${{ steps.cmd.outputs.command }}
+          TARGET: ${{ inputs.target }}
         run: |
           if [ -f build/espos_partitions.defaults ] && [[ "$COMMAND" == *" SDKCONFIG_DEFAULTS="* ]]; then
             echo "::error::this project runs espOS's prologue, but the build passed SDKCONFIG_DEFAULTS, which replaces espOS's defaults (signed updates included); call espos_project_prologue() from the root CMakeLists.txt"
@@ -366,20 +367,25 @@ jobs:
           declare -A want from
           IFS=';' read -ra files <<< "$DEFAULTS"
           for f in "${files[@]}"; do
-            while IFS= read -r line; do
-              line=${line%$'\r'}
-              if [[ "$line" =~ ^(CONFIG_[A-Za-z0-9_]+)=n$ ]] ||
-                 [[ "$line" =~ ^#\ (CONFIG_[A-Za-z0-9_]+)\ is\ not\ set$ ]]; then
-                key=${BASH_REMATCH[1]}
-                want[$key]="# $key is not set"
-              elif [[ "$line" =~ ^(CONFIG_[A-Za-z0-9_]+)= ]]; then
-                key=${BASH_REMATCH[1]}
-                want[$key]=$line
-              else
-                continue
-              fi
-              from[$key]=$f
-            done < "$f"
+            # IDF reads <file>.<target> right after <file>.
+            layers=("$f")
+            [ -f "$f.$TARGET" ] && layers+=("$f.$TARGET")
+            for layer in "${layers[@]}"; do
+              while IFS= read -r line; do
+                line=${line%$'\r'}
+                if [[ "$line" =~ ^(CONFIG_[A-Za-z0-9_]+)=n$ ]] ||
+                   [[ "$line" =~ ^#\ (CONFIG_[A-Za-z0-9_]+)\ is\ not\ set$ ]]; then
+                  key=${BASH_REMATCH[1]}
+                  want[$key]="# $key is not set"
+                elif [[ "$line" =~ ^(CONFIG_[A-Za-z0-9_]+)= ]]; then
+                  key=${BASH_REMATCH[1]}
+                  want[$key]=$line
+                else
+                  continue
+                fi
+                from[$key]=$layer
+              done < "$layer"
+            done
           done
           for key in "${!want[@]}"; do
             grep -qxF -- "${want[$key]}" sdkconfig || {
