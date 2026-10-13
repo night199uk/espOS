@@ -13,6 +13,8 @@
 #         require: storage
 #       secrets:
 #         signing_key: ${{ secrets.SIGNING_KEY_PEM }}
+#         dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+#         dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
 #
 # Driven by release-please, and/or several targets at once. Pass `tag`: a
 # release created with the workflow token does not fire the `release:` event,
@@ -120,6 +122,17 @@ on:
           PEM of the app-signing key. Required for a release; without it
           devices in the field can never take another OTA from you.
         required: false
+      dockerhub_username:
+        description: >-
+          Docker Hub user to pull the ESP-IDF image as. A secret rather than an
+          input so a caller can pass either a variable or a secret; with the
+          token, it lifts the anonymous pull limit shared by every job on the
+          runner's address. Optional: without both the image is pulled
+          anonymously, as before.
+        required: false
+      dockerhub_token:
+        description: "Docker Hub access token for dockerhub_username"
+        required: false
     outputs:
       unsigned:
         description: "true when the release was built with a throwaway key"
@@ -132,6 +145,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # A step's `if:` cannot read secrets, so whether to log in is decided here.
+    env:
+      DOCKERHUB_LOGIN: ${{ secrets.dockerhub_username != '' && secrets.dockerhub_token != '' }}
     outputs:
       unsigned: ${{ steps.signing.outputs.unsigned }}
     steps:
@@ -298,6 +314,18 @@ jobs:
           done
           echo "command=idf.py -D SDKCONFIG_DEFAULTS=\"sdkconfig.defaults;$DEFAULTS\" build" \
             >> "$GITHUB_OUTPUT"
+
+      # Anonymous pulls of the ESP-IDF image are rate limited per runner
+      # address, so a release could fail on a pull another repository's job
+      # spent. A failed login falls back to that anonymous pull rather than
+      # failing the release.
+      - name: log in to Docker Hub
+        if: env.DOCKERHUB_LOGIN == 'true'
+        continue-on-error: true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.dockerhub_username }}
+          password: ${{ secrets.dockerhub_token }}
 
       - uses: espressif/esp-idf-ci-action@v1
         with:
