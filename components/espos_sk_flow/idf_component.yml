@@ -3,7 +3,7 @@
 ## espos_sk_flow component manifest: registry metadata for signalk-espos/espos_sk_flow.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.18.1"
+version: "0.19.0"
 # x-release-please-end
 description: "Signal K nodes for the espos::flow graph: publish, subscribe, and inbound PUT control"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_sk_flow"
@@ -30,21 +30,21 @@ dependencies:
   idf: ">=6.0.0,<6.1.0"
   signalk-espos/espos_flow:
     # x-release-please-start-version
-    version: "^0.18.1"
+    version: "^0.19.0"
     # x-release-please-end
     override_path: "../espos_flow"
   signalk-espos/espos_health:
     # x-release-please-start-version
-    version: "^0.18.1"
+    version: "^0.19.0"
     # x-release-please-end
     override_path: "../espos_health"
   signalk-espos/espos_net:
     # x-release-please-start-version
-    version: "^0.18.1"
+    version: "^0.19.0"
     # x-release-please-end
     override_path: "../espos_net"
   signalk-espos/espos_sk:
     # x-release-please-start-version
-    version: "^0.18.1"
+    version: "^0.19.0"
     # x-release-please-end
     override_path: "../espos_sk"

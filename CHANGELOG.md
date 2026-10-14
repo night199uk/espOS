@@ -15,6 +15,20 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.19.0 (2026-10-13)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Added
+* feat(release): ship one full-flash image per flash size by @dirkwa in https://github.com/signalk-espOS/espOS/pull/223
+* feat(partitions): grow nvs to 128K in every table by @dirkwa in https://github.com/signalk-espOS/espOS/pull/224
+### Fixed
+* fix(release): keep espOS's defaults in board variants by @dirkwa in https://github.com/signalk-espOS/espOS/pull/221
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.18.1...v0.19.0
+
 ## 0.18.1 (2026-10-12)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
