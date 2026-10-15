@@ -36,8 +36,10 @@ We hold ourselves to four things:
    doesn't belong in the registry. We talk to its maintainer first; registry
    maintainers decide on the listing.
 4. **Safe to update.** A device accepts only firmware signed with the key it
-   was flashed with, and an update must leave a boat's devices working as
-   before.
+   was flashed with, so a project keeps one signing key for all its releases,
+   and an update must leave a boat's devices working as before. A build made
+   with a throwaway key installs over USB but takes no updates, and the
+   manager says so.
 
 ## Status
 
