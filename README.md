@@ -16,6 +16,31 @@ espOS lives at [github.com/signalk-espOS/espOS](https://github.com/signalk-espOS
 and publishes its components as `signalk-espos/espos_*`. It is a community
 project, not an official Signal K repository.
 
+## Mission
+
+signalk-espOS puts ESP32 boards to work on boats without asking the owner to
+be a developer. A boat owner picks a job, flashes a board from the browser
+and gets signed updates over the air from then on. A developer starts from a
+maintained base on the latest ESP-IDF and spends their time on what makes
+their project different.
+
+We hold ourselves to four things:
+
+1. **Community first.** The [registry](https://github.com/signalk-espOS/registry)
+   lists projects maintained by their developers. Anyone can add a project
+   with one registry entry and no credentials; a maintainer reviews new
+   entries.
+2. **Upstream, not around.** A fix to the shared base lands in espOS so every
+   project gets it. Forks are welcome when they feed back.
+3. **One clean ecosystem.** A rebranded copy that only splits users and effort
+   doesn't belong in the registry. We talk to its maintainer first; registry
+   maintainers decide on the listing.
+4. **Safe to update.** A device accepts only firmware signed with the key it
+   was flashed with, so a project keeps one signing key for all its releases,
+   and an update must leave a boat's devices working as before. A build made
+   with a throwaway key installs over USB but takes no updates, and the
+   manager says so.
+
 ## Status
 
 espOS is pre-1.0; `version.txt` and the
