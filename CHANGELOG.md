@@ -15,6 +15,21 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.20.0 (2026-10-17)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Added
+* feat(usb_storage): export the SD card to a USB host by @dirkwa in https://github.com/signalk-espOS/espOS/pull/228
+* feat(sdlog): add microSD sessions that survive a power cut by @dirkwa in https://github.com/signalk-espOS/espOS/pull/227
+* feat(nmea0183): add NMEA 0183 input over a UART by @dirkwa in https://github.com/signalk-espOS/espOS/pull/226
+### Fixed
+* fix(sdlog): take only directories as sessions by @dirkwa in https://github.com/signalk-espOS/espOS/pull/232
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.19.1...v0.20.0
+
 ## 0.19.1 (2026-10-17)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->

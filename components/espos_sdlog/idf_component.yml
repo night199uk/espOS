@@ -3,7 +3,7 @@
 ## espos_sdlog component manifest: registry metadata for signalk-espos/espos_sdlog.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.19.1"
+version: "0.20.0"
 # x-release-please-end
 description: "microSD for espOS: a card over SDMMC or SPI, and sessions of rows on it that survive a power cut"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_sdlog"
