@@ -358,6 +358,16 @@ TEST_CASE("lowMemory thresholds: warn on total or internal, fatal alarm on inter
     TEST_ASSERT_NULL(strstr(msg, "fragmented"));
     TEST_ASSERT_NOT_NULL(strstr(msg, "internal RAM low"));
 
+    /* Less free than the block floor is running out, warn floor or not. */
+    espos_health_policy_cfg_t no_warn = CFG;
+    no_warn.internal_warn_kb = 0;
+    no_warn.internal_alarm_kb = 0;
+    h = HEALTHY;
+    h.internal_free = 7 * 1024;
+    h.largest_block = 7 * 1024;
+    TEST_ASSERT_EQUAL(ESPOS_HEALTH_ALARM, espos_health_policy_memory(&no_warn, &h, msg, sizeof(msg), &flags));
+    TEST_ASSERT_NOT_NULL(strstr(msg, "internal RAM low"));
+
     /* The cockpit's measured trough while esp-sr starts must not alarm. */
     h = HEALTHY;
     h.internal_free = 24 * 1024;
