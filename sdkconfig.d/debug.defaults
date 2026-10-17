@@ -9,6 +9,10 @@
 # had to be answered by hand on a device: who corrupted the heap, which task
 # leaked, whose stack overflowed, and does the core-dump path actually work.
 
+# -Og instead of the base profile's -Os: more locals and line numbers survive
+# in a debugger and in core-dump backtraces.
+CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
+
 # Heap: canaries on both sides of every block, checked on free and by
 # heap_caps_check_integrity(); an overrun is caught where it happens instead
 # of three allocations later.

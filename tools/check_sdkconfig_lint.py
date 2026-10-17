@@ -42,6 +42,7 @@ COSMETIC = {
     "CONFIG_MBEDTLS_DYNAMIC_FREE_PEER_CERT": "TLS memory tuning",
     "CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN": "TLS record size; smaller works with smaller servers",
     "CONFIG_MBEDTLS_TLS_CLIENT_ONLY": "size tuning; a server build still works",
+    "CONFIG_COMPILER_OPTIMIZATION_SIZE": "size tuning; -Og builds and runs, the project weighs its own slot",
 }
 
 

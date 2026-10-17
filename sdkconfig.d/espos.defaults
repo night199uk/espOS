@@ -17,6 +17,14 @@
 # project that brings its own table and does not say otherwise.
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
+# ---- Code size. IDF defaults to -Og, which keeps a debugger's view closer but
+# costs about 12% of the app image: on the ESP32-C5 the root build filled
+# 92.8% of a 4 MB table's 1.69 MB slot at -Og and 81.7% at -Os (1,642,496 vs
+# 1,445,888 bytes), and the C6 sat at 89.1%. The slot is fixed at the first
+# USB flash, so headroom lost here is lost for good on boards in the field.
+# debug.defaults puts -Og back for bench work.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
 # ---- Task stacks: WiFi/IP events and FreeRTOS timers run the state machine,
 # JSON building and SSE sends; the IDF defaults (2304 / 2048) are too tight.
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
