@@ -27,6 +27,8 @@
         { "type": "generic", "path": "components/espos_n2k/idf_component.yml" },
         { "type": "generic", "path": "components/espos_n2k/README.md" },
         { "type": "generic", "path": "components/espos_net/idf_component.yml" },
+        { "type": "generic", "path": "components/espos_nmea0183/idf_component.yml" },
+        { "type": "generic", "path": "components/espos_nmea0183/README.md" },
         { "type": "generic", "path": "components/espos_ota/idf_component.yml" },
         { "type": "generic", "path": "components/espos_power/idf_component.yml" },
         { "type": "generic", "path": "components/espos_prov/idf_component.yml" },

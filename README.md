@@ -178,6 +178,7 @@ the rest are optional.
 | `espos_prov` | BLE provisioning: WiFi credentials from a phone over GATT | [provisioning.md](docs/provisioning.md) |
 | `espos_ble` | BLE gateway | [ble.md](docs/ble.md) |
 | `espos_n2k` | NMEA 2000 over TWAI + a candump TCP server | [n2k.md](docs/n2k.md) |
+| `espos_nmea0183` | NMEA 0183 off a UART: a GPS, compass or depth sounder, published to Signal K | [nmea0183.md](docs/nmea0183.md) |
 | `espos_sdlog` | A microSD card over SDMMC or SPI, and sessions of rows on it that survive a power cut | [sdlog.md](docs/sdlog.md) |
 | `espos_audio` | The `AudioDriver` contract a board implements (header-only) | [voice.md](docs/voice.md) |
 | `espos_voice` | Wyoming voice satellite with esp-sr wake word | [voice.md](docs/voice.md) |

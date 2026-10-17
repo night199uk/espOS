@@ -423,6 +423,8 @@ jobs:
           - { example: components/espos_usb_storage/examples/usb_storage_follow, target: esp32p4 }
           - { example: components/espos_usb_storage/examples/usb_storage_follow, target: esp32s3 }
           - { example: components/espos_eth/examples/ethernet, target: esp32p4 }
+          - { example: components/espos_nmea0183/examples/nmea0183_gps, target: esp32c6 }
+          - { example: components/espos_nmea0183/examples/nmea0183_gps, target: esp32p4 }
           - { example: components/espos_power/examples/duty_cycle, target: esp32c6 }
           - { example: components/espos_power/examples/duty_cycle, target: esp32p4 }
           - { example: components/espos_prov/examples/ble_provisioning, target: esp32c6 }

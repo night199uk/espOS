@@ -63,6 +63,9 @@ table before calling anything from inside a callback.
 | [`espos_ota_manifest.h`](api-c/espos__ota__manifest_8h.md) | `espos_ota` | manifest parsing and version comparison (pure C) |
 | [`espos_ble.h`](api-c/espos__ble_8h.md) | `espos_ble` | the BLE gateway: start, status |
 | [`espos_prov.h`](api-c/espos__prov_8h.md) | `espos_prov` | BLE provisioning: WiFi credentials over GATT, written to config |
+| [`espos_nmea0183.h`](api-c/espos__nmea0183_8h.md) | `espos_nmea0183` | NMEA 0183 framing, checksum, fields and sentence decoders (pure C) |
+| [`espos_nmea0183_sk.h`](api-c/espos__nmea0183__sk_8h.md) | `espos_nmea0183` | what a sentence means in Signal K: the mapping (pure C) and the publisher |
+| [`espos_nmea0183_uart.h`](api-c/espos__nmea0183__uart_8h.md) | `espos_nmea0183` | sentences off a UART, to several listeners |
 | [`espos_sdlog.h`](api-c/espos__sdlog_8h.md) | `espos_sdlog` | sessions of rows that survive a power cut: open, append, close, recover, sync markers, pruning (pure C) |
 | [`espos_sdlog_card.h`](api-c/espos__sdlog__card_8h.md) | `espos_sdlog` | a microSD card as FAT over SDMMC or SPI |
 | [`espos_eth.h`](api-c/espos__eth_8h.md) | `espos_eth` | wired Ethernet as an espos_net transport: start, stop, link |

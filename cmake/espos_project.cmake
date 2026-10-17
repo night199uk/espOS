@@ -123,8 +123,8 @@ macro(espos_project_prologue)
         # lock and compiles ~350 objects nobody links (measured on a headless
         # P4 gateway: 157 MB of esp-dl archives, 0 members linked). Naming
         # what you use is the only place this can be decided before project().
-        set(_espos_optional espos_ble espos_eth espos_n2k espos_power espos_prov espos_sdlog espos_voice espos_audio
-                            espos_usb_storage)
+        set(_espos_optional espos_ble espos_eth espos_n2k espos_nmea0183 espos_power espos_prov espos_sdlog
+                            espos_voice espos_audio espos_usb_storage)
         foreach(_c IN LISTS _ESPOS_COMPONENTS)
             if(NOT "${_c}" IN_LIST _espos_optional)
                 message(FATAL_ERROR "${_ESPOS_NAME}: COMPONENTS names '${_c}', which is not an optional "

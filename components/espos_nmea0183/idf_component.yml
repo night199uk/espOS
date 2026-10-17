@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 Dirk Wahrheit
+# SPDX-License-Identifier: Apache-2.0
+## espos_nmea0183 component manifest: registry metadata for signalk-espos/espos_nmea0183.
+## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
+# x-release-please-start-version
+version: "0.19.1"
+# x-release-please-end
+description: "NMEA 0183 for espOS: sentences off a UART, checked and decoded, and published to Signal K"
+url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_nmea0183"
+repository: "https://github.com/signalk-espOS/espOS.git"
+documentation: "https://github.com/signalk-espOS/espOS/blob/main/docs/nmea0183.md"
+issues: "https://github.com/signalk-espOS/espOS/issues"
+license: "Apache-2.0"
+maintainers:
+  - "Dirk Wahrheit <dirkwahrheit@gmail.com>"
+tags:
+  - signalk
+  - marine
+  - esp-idf
+  - espos
+  - nmea0183
+  - gps
+  - depth-sounder
+files:
+  exclude:
+    - "build/**/*"
+    - "build-*/**/*"
+    - "sdkconfig*"
+    - "managed_components/**/*"
+    - "dependencies.lock"
+    - "examples/*/build/**/*"
+    - "examples/*/build-*/**/*"
+    - "examples/*/managed_components/**/*"
+    - "examples/*/dependencies.lock"
+    # The GENERATED sdkconfig only. Not "sdkconfig*": that glob also matched
+    # the tracked sdkconfig.defaults[.<target>] files, which for an example
+    # without the prologue ARE the example -- a downloaded from_registry was
+    # missing the nine settings espos_core then refused to build without.
+    - "examples/*/sdkconfig"
+    - "examples/*/sdkconfig.old"
+    - "examples/*/*.pem"
+dependencies:
+  idf: ">=6.0.0,<6.1.0"
+  # espos_sk and espos_time are optional and deliberately absent: with
+  # espos_sk in the build espos_nmea0183_sk_publish() sends the values, with
+  # espos_time a GPS fix sets the clock. A firmware that only logs sentences
+  # needs neither.

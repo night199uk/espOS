@@ -50,6 +50,7 @@ body:
         - label: OTA install and rollback
         - label: BLE gateway
         - label: NMEA 2000 over TWAI (espos_n2k)
+        - label: NMEA 0183 over a UART (espos_nmea0183)
         - label: microSD logging (espos_sdlog)
         - label: USB storage bridge (espos_usb_storage)
         - label: Audio / voice satellite (espos_voice)

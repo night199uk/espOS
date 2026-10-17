@@ -72,6 +72,7 @@ by the application when its board has the hardware.
 | `espos_ota` | Signed OTA with rollback, from a URL or a version manifest | [OTA](ota.md) |
 | `espos_ble` | BLE gateway to signalk-server's BLE provider API | [BLE gateway](ble.md) |
 | `espos_n2k` | NMEA 2000 over TWAI + a candump TCP server | [NMEA 2000 gateway](n2k.md) |
+| `espos_nmea0183` | NMEA 0183 in over a UART: a GPS or sounder decoded to Signal K, and GPS time for the clock | [NMEA 0183 input](nmea0183.md) |
 | `espos_sdlog` | Rows on a microSD card in sessions that survive a power cut, with a row count and sha256 to check an upload against | [microSD logging](sdlog.md) |
 | `espos_usb_storage` | A microSD card exported over USB to a chartplotter, with new records followed off it | [USB storage bridge](usb-storage.md) |
 | `espos_audio` | The `AudioDriver` contract a board implements (header-only) | [Voice satellite](voice.md) |
