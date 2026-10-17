@@ -143,7 +143,8 @@ jobs:
     name: clang-format (changed C/C++ files)
     # PRs only: the tree was never mass-formatted, so only the files a PR
     # touches are checked. The component .clang-format files (Google style for
-    # espos_n2k/espos_voice/espos_audio) are found by clang-format itself.
+    # espos_n2k/espos_voice/espos_audio/espos_usb_storage) are found by
+    # clang-format itself.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -419,6 +420,8 @@ jobs:
           - { example: components/espos_n2k/examples/n2k_candump, target: esp32p4 }
           - { example: components/espos_n2k/examples/n2k_switch_bank, target: esp32p4 }
           - { example: components/espos_n2k/examples/n2k_switch_bank, target: esp32s3 }
+          - { example: components/espos_usb_storage/examples/usb_storage_follow, target: esp32p4 }
+          - { example: components/espos_usb_storage/examples/usb_storage_follow, target: esp32s3 }
           - { example: components/espos_eth/examples/ethernet, target: esp32p4 }
           - { example: components/espos_power/examples/duty_cycle, target: esp32c6 }
           - { example: components/espos_power/examples/duty_cycle, target: esp32p4 }

@@ -68,7 +68,7 @@ ALLOWLIST: dict[str, dict[str, str]] = {
 # the C ABI until they get C wrappers.
 CPP_ONLY = {"espos_audio", "espos_n2k", "espos_voice",
             "espos_flow", "espos_formulas", "espos_sensors", "espos_sk_flow",
-            "espos_devices"}
+            "espos_devices", "espos_usb_storage"}
 
 # The one IDF header every public header may include: esp_err_t is the return
 # type of the whole API.

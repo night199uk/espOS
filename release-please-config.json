@@ -34,6 +34,8 @@
         { "type": "generic", "path": "components/espos_sk/idf_component.yml" },
         { "type": "generic", "path": "components/espos_sk_flow/idf_component.yml" },
         { "type": "generic", "path": "components/espos_time/idf_component.yml" },
+        { "type": "generic", "path": "components/espos_usb_storage/idf_component.yml" },
+        { "type": "generic", "path": "components/espos_usb_storage/README.md" },
         { "type": "generic", "path": "components/espos_voice/idf_component.yml" },
         { "type": "generic", "path": "components/espos_wifi/idf_component.yml" }
       ]

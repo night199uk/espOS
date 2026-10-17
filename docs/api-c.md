@@ -108,6 +108,8 @@ C wrappers. `tools/check_public_headers.py` lists them as `CPP_ONLY`.
 | [`espos_n2k/candump_tcp_server.h`](api-c/candump__tcp__server_8h.md) | `espos_n2k` | candump-format TCP server, advertised over mDNS |
 | [`espos_n2k/candump_format.h`](api-c/candump__format_8h.md) | `espos_n2k` | candump ASCII encode/decode (host-tested) |
 | [`espos_n2k/twai_message.h`](api-c/twai__message_8h.md) | `espos_n2k` | compatibility alias `TwaiMessage` → `CanMessage` |
+| [`espos_usb_storage/usb_storage.h`](api-c/usb__storage_8h.md) | `espos_usb_storage` | export the microSD card over USB, write tracking, `follow()` |
+| [`espos_usb_storage/follower.h`](api-c/follower_8h.md) | `espos_usb_storage` | the follower that hands new records on, with its FS and progress ports (host-tested) |
 | [`espos_voice/wyoming_satellite.h`](api-c/wyoming__satellite_8h.md) | `espos_voice` | the Wyoming satellite server |
 | [`espos_voice/wake_engine.h`](api-c/wake__engine_8h.md) | `espos_voice` | esp-sr WakeNet wrapper |
 | [`espos_voice/protocol/events.h`](api-c/events_8h.md), [`framing.h`](api-c/framing_8h.md) | `espos_voice` | the Wyoming wire protocol |

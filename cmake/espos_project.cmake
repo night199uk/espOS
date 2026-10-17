@@ -68,7 +68,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 #                   partitions/<n>mb.csv tables also set the flash size.
 # COMPONENTS        the OPTIONAL espOS components this firmware uses:
 #                   espos_ble, espos_n2k, espos_voice (implies espos_audio),
-#                   espos_audio. The core set (config, log, event, health,
+#                   espos_audio, espos_usb_storage. The core set (config, log, event, health,
 #                   httpd, net, wifi, sk, ota, core) is always available;
 #                   espos_wifi is excluded on targets without WiFi
 #                   (esp32h2/h21/h4). Anything optional and not named is
@@ -123,7 +123,8 @@ macro(espos_project_prologue)
         # lock and compiles ~350 objects nobody links (measured on a headless
         # P4 gateway: 157 MB of esp-dl archives, 0 members linked). Naming
         # what you use is the only place this can be decided before project().
-        set(_espos_optional espos_ble espos_eth espos_n2k espos_power espos_prov espos_voice espos_audio)
+        set(_espos_optional espos_ble espos_eth espos_n2k espos_power espos_prov espos_voice espos_audio
+                            espos_usb_storage)
         foreach(_c IN LISTS _ESPOS_COMPONENTS)
             if(NOT "${_c}" IN_LIST _espos_optional)
                 message(FATAL_ERROR "${_ESPOS_NAME}: COMPONENTS names '${_c}', which is not an optional "

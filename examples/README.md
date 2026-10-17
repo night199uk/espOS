@@ -27,6 +27,7 @@ threading, boot order, the server's REST tree, TLS.
 | `n2k_candump` | Advanced | an NMEA 2000→Signal K gateway: CAN frames out as candump ASCII over TCP, decoded by canboatjs on the server | — (SensESP has no equivalent) | `components/espos_n2k/examples/n2k_candump` |
 | `n2k_switch_bank` | Advanced | an NMEA 2000 switch bank any MFD can switch: the device claims its own address and answers as a node (PGN 127501/127502), with the candump server on the same bus | SensESP + the NMEA2000 library by hand | `components/espos_n2k/examples/n2k_switch_bank` |
 | `ethernet` | Newbie | an espOS device on a cable: the whole firmware is `espos_start()`, WiFi off, the route on wired Ethernet | — (SensESP's `p4_ethernet`) | `components/espos_eth/examples/ethernet` |
+| `usb_storage_follow` | Advanced | the board's microSD as a USB stick for a chartplotter, with espOS following the files the plotter appends to (ESP32-P4 and ESP32-S3 only: it needs USB OTG) | — (SensESP has no equivalent) | `components/espos_usb_storage/examples/usb_storage_follow` |
 | `duty_cycle` | Advanced | a device on a battery: wake, publish, flush, deep-sleep, again — and how it stays reachable | — (SensESP has no equivalent) | `components/espos_power/examples/duty_cycle` |
 | `ble_provisioning` | Advanced | WiFi credentials handed over BLE instead of the setup portal, with the Python client that speaks it | — (SensESP has no equivalent) | `components/espos_prov/examples/ble_provisioning` |
 

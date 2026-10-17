@@ -72,6 +72,7 @@ by the application when its board has the hardware.
 | `espos_ota` | Signed OTA with rollback, from a URL or a version manifest | [OTA](ota.md) |
 | `espos_ble` | BLE gateway to signalk-server's BLE provider API | [BLE gateway](ble.md) |
 | `espos_n2k` | NMEA 2000 over TWAI + a candump TCP server | [NMEA 2000 gateway](n2k.md) |
+| `espos_usb_storage` | A microSD card exported over USB to a chartplotter, with new records followed off it | [USB storage bridge](usb-storage.md) |
 | `espos_audio` | The `AudioDriver` contract a board implements (header-only) | [Voice satellite](voice.md) |
 | `espos_voice` | Wyoming voice satellite with esp-sr wake word | [Voice satellite](voice.md) |
 

@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Dirk Wahrheit
+# SPDX-License-Identifier: Apache-2.0
+#
+# The plotter's directory and file names are longer than 8.3.
+CONFIG_FATFS_LFN_HEAP=y
+# The class TinyUSB presents; esp_tinyusb compiles nothing for it otherwise.
+CONFIG_TINYUSB_MSC_ENABLED=y
+CONFIG_TINYUSB_DESC_PRODUCT_STRING="espOS SD card"

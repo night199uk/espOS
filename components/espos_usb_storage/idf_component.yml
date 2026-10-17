@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 Dirk Wahrheit
+# SPDX-License-Identifier: Apache-2.0
+## espos_usb_storage component manifest: registry metadata for signalk-espos/espos_usb_storage.
+## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
+# x-release-please-start-version
+version: "0.19.1"
+# x-release-please-end
+description: "A microSD card exported over USB to a chartplotter, with espOS following the files it writes"
+url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_usb_storage"
+repository: "https://github.com/signalk-espOS/espOS.git"
+documentation: "https://github.com/signalk-espOS/espOS/blob/main/docs/usb-storage.md"
+issues: "https://github.com/signalk-espOS/espOS/issues"
+license: "Apache-2.0"
+maintainers:
+  - "Dirk Wahrheit <dirkwahrheit@gmail.com>"
+tags:
+  - signalk
+  - marine
+  - esp-idf
+  - espos
+  - usb
+  - msc
+  - sdcard
+# No `targets`, for the reason espos_n2k gives: a list without linux would
+# fail every host-test project that has components/ on EXTRA_COMPONENT_DIRS.
+# The rule below and CMakeLists.txt carry the restriction to the P4 and S3.
+files:
+  exclude:
+    - "build/**/*"
+    - "build-*/**/*"
+    - "sdkconfig*"
+    - "managed_components/**/*"
+    - "dependencies.lock"
+    - "examples/*/build/**/*"
+    - "examples/*/build-*/**/*"
+    - "examples/*/managed_components/**/*"
+    - "examples/*/dependencies.lock"
+    - "examples/*/sdkconfig"
+    - "examples/*/sdkconfig.old"
+    - "examples/*/*.pem"
+dependencies:
+  idf: ">=6.0.0,<6.1.0"
+  # Exact, like every other registry dependency in espOS: TinyUSB sits between
+  # a chartplotter and its recordings, and a minor arriving on its own would
+  # change that with nobody looking.
+  espressif/esp_tinyusb:
+    version: "==2.4.0"
+    rules:
+      - if: "target in [esp32s3, esp32p4]"
