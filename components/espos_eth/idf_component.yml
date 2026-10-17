@@ -3,7 +3,7 @@
 ## espos_eth component manifest: registry metadata for signalk-espos/espos_eth.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.20.0"
+version: "0.21.0"
 # x-release-please-end
 description: "Wired Ethernet (internal EMAC + RMII PHY) as an espos_net transport; preferred over WiFi when both are up"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_eth"
@@ -34,6 +34,6 @@ dependencies:
   # checkout next to this file; a registry copy has no such directory.
   signalk-espos/espos_net:
     # x-release-please-start-version
-    version: "^0.20.0"
+    version: "^0.21.0"
     # x-release-please-end
     override_path: "../espos_net"

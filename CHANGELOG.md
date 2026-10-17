@@ -15,6 +15,17 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.21.0 (2026-10-17)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Added
+* feat(sk): publish for another vessel's context by @dirkwa in https://github.com/signalk-espOS/espOS/pull/233
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.20.0...v0.21.0
+
 ## 0.20.0 (2026-10-17)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->

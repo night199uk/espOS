@@ -15,16 +15,16 @@ dependencies:
   idf: ">=6.0.0,<6.1.0"
   signalk-espos/espos_core:
     # x-release-please-start-version
-    version: "^0.20.0"
+    version: "^0.21.0"
     # x-release-please-end
     override_path: "../../.."
   signalk-espos/espos_sk:
     # x-release-please-start-version
-    version: "^0.20.0"
+    version: "^0.21.0"
     # x-release-please-end
     override_path: "../../../../espos_sk"
   signalk-espos/espos_ota:
     # x-release-please-start-version
-    version: "^0.20.0"
+    version: "^0.21.0"
     # x-release-please-end
     override_path: "../../../../espos_ota"

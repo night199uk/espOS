@@ -3,7 +3,7 @@
 NMEA 0183 for espOS: sentences off a UART, checked and decoded into Signal K units, and published to Signal K — a GPS, a compass or a depth sounder on any espOS device.
 
 ```sh
-idf.py add-dependency "signalk-espos/espos_nmea0183^0.20.0"  # x-release-please-version
+idf.py add-dependency "signalk-espos/espos_nmea0183^0.21.0"  # x-release-please-version
 ```
 
 Part of [espOS](https://github.com/signalk-espOS/espOS), an ESP-IDF runtime for Signal K devices. The components are released in lockstep, so one version of `espos_nmea0183` works with the same version of every other.

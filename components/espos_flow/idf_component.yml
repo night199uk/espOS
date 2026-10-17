@@ -3,7 +3,7 @@
 ## espos_flow component manifest: registry metadata for signalk-espos/espos_flow.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.20.0"
+version: "0.21.0"
 # x-release-please-end
 description: "The data-flow runtime: one loop task, a timer wheel, a mailbox, and a typed producer/consumer graph"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_flow"
@@ -52,6 +52,6 @@ dependencies:
   # espos_flow/transforms.hpp. It is header-only and links nothing.
   signalk-espos/espos_formulas:
     # x-release-please-start-version
-    version: "^0.20.0"
+    version: "^0.21.0"
     # x-release-please-end
     override_path: "../espos_formulas"
