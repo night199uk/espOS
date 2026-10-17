@@ -305,7 +305,11 @@ should treat it and every member as optional.
 `min_free_heap` and `min_internal_free` are low-water marks since boot; `free_heap` and
 `free_internal` are the live figures beside them. The whole-heap pair asks
 `MALLOC_CAP_DEFAULT` — what a plain `malloc()` may be given — and the internal pair
-`MALLOC_CAP_INTERNAL`. Whether PSRAM is part of the whole-heap pair is a build
+`MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT`. The `8BIT` matters on a classic ESP32: the
+IRAM left over after code is internal heap there too, but only 32-bit accesses may use
+it, so no buffer, stack or WiFi frame can come from it. Earlier releases counted it,
+and a device could read ~31 KB more `free_internal` than it had (a HALMET showed 50304
+beside a `free_heap` of 18544). Whether PSRAM is part of the whole-heap pair is a build
 question, not a hardware one: it joins the `malloc()` heap only when
 `CONFIG_SPIRAM_USE_MALLOC` says so, and `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` then
 decides how much still comes from internal RAM.

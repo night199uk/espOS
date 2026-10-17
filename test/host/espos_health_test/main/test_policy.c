@@ -348,6 +348,16 @@ TEST_CASE("lowMemory thresholds: warn on total or internal, fatal alarm on inter
     TEST_ASSERT_EQUAL_UINT32(ESPOS_HEALTH_F_REBOOT_ON_ALARM, flags);
     TEST_ASSERT_NOT_NULL(strstr(msg, "fragmented"));
 
+    /* The HALMET's figures: free RAM below the warn floor, spread over regions.
+     * Still fatal, but named for running out, not for fragmentation. */
+    h = HEALTHY;
+    h.internal_free = 18 * 1024;
+    h.largest_block = 7 * 1024;
+    TEST_ASSERT_EQUAL(ESPOS_HEALTH_ALARM, espos_health_policy_memory(&CFG, &h, msg, sizeof(msg), &flags));
+    TEST_ASSERT_EQUAL_UINT32(ESPOS_HEALTH_F_REBOOT_ON_ALARM, flags);
+    TEST_ASSERT_NULL(strstr(msg, "fragmented"));
+    TEST_ASSERT_NOT_NULL(strstr(msg, "internal RAM low"));
+
     /* The cockpit's measured trough while esp-sr starts must not alarm. */
     h = HEALTHY;
     h.internal_free = 24 * 1024;

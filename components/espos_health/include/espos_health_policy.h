@@ -43,7 +43,7 @@ extern "C" {
 typedef struct {
     uint32_t total_free;    /* free in the default heap */
     uint32_t total_min;     /* low-water mark of total_free since boot */
-    uint32_t internal_free; /* free internal RAM — the scarce pool on PSRAM boards */
+    uint32_t internal_free; /* free internal byte-addressable RAM — the scarce pool */
     uint32_t internal_min;  /* low-water mark of internal_free since boot */
     uint32_t largest_block; /* largest allocatable internal 8-bit block */
 } espos_health_heap_t;
@@ -57,8 +57,8 @@ typedef struct {
     /* memoryTrough WARN when the internal-RAM low-water mark since boot is below
      * this much; 0 = off. Reporting only -- never fatal, by construction.
      *
-     * The mark is heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL), which SUMS
-     * each matching region's own minimum. Those minima need not be simultaneous, so
+     * The mark is heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+     * which SUMS each matching region's own minimum. Those minima need not be simultaneous, so
      * the sum is a LOWER bound on the worst simultaneous total -- no higher than it,
      * and usually below it. It says the device never had LESS free than this, not
      * that it ever had this little. Pessimistic, which is safe for a warning.

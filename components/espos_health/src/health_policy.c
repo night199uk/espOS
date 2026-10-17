@@ -63,7 +63,12 @@ espos_health_state_t espos_health_policy_memory(const espos_health_policy_cfg_t 
     } else if (cfg->largest_block_alarm_kb && h->largest_block < cfg->largest_block_alarm_kb * 1024u) {
         st = ESPOS_HEALTH_ALARM;
         f = ESPOS_HEALTH_F_REBOOT_ON_ALARM;
-        snprintf(buf, sizeof(buf), "internal RAM fragmented (largest block below %u KB)",
+        /* A small largest block means fragmentation only while plenty is free.
+         * Below the warn floor the free RAM is simply spread over the chip's
+         * separate regions, and "fragmented" sent a HALMET owner hunting a
+         * fragmenting allocator when the heap was just running out. */
+        const bool low = cfg->internal_warn_kb && h->internal_free < cfg->internal_warn_kb * 1024u;
+        snprintf(buf, sizeof(buf), "internal RAM %s (largest block below %u KB)", low ? "low" : "fragmented",
                  (unsigned)cfg->largest_block_alarm_kb);
         m = buf;
     } else if (cfg->internal_warn_kb && h->internal_free < cfg->internal_warn_kb * 1024u) {
