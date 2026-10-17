@@ -187,12 +187,11 @@ it is the scarce pool — the radio, DMA and every task stack come from it, and
 tens of megabytes free overall hide its exhaustion. "Internal" means internal *and
 byte-addressable* (`MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT`): a classic ESP32 also
 turns its spare IRAM into heap, but only 32-bit accesses may use it, so no buffer,
-stack or WiFi frame can come from it. Counted, it kept `free_internal` ~31 KB above
-the truth, and a HALMET whose `malloc()` heap had run down to 18 KB met the
-largest-block alarm worded "fragmented" when it was simply running out. That alarm
-now reads "internal RAM low (largest block below N KB)" whenever free internal RAM is
-also under the warn floor or under the block floor itself, and "fragmented" only when
-plenty is free but none of it is contiguous. The alarm thresholds sit
+stack or WiFi frame can come from it; counting it would overstate free internal RAM
+by about 31 KB there. The largest-block alarm reads "internal RAM low (largest block
+below N KB)" when free internal RAM is also under the warn floor or under the block
+floor itself, and "internal RAM fragmented" only when more is free but none of it is
+contiguous. The alarm thresholds sit
 *below* the deepest legitimate trough measured so far (an ESP32-P4 panel at
 ~24 KB free / ~23 KB largest block while esp-sr's wake pipeline allocates,
 settling near 95 KB), because a threshold above it restarts the device on
