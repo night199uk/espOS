@@ -3,7 +3,7 @@
 ## espos_prov component manifest: registry metadata for signalk-espos/espos_prov.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.19.0"
+version: "0.19.1"
 # x-release-please-end
 description: "BLE provisioning: WiFi credentials from a phone over GATT, without an access point"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_prov"
@@ -31,7 +31,7 @@ dependencies:
   idf: ">=6.0.0,<6.1.0"
   signalk-espos/espos_config:
     # x-release-please-start-version
-    version: "^0.19.0"
+    version: "^0.19.1"
     # x-release-please-end
     override_path: "../espos_config"
   # The JSON the config endpoint accepts. Same pin as every other component.

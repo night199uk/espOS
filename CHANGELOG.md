@@ -15,6 +15,17 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.19.1 (2026-10-17)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Fixed
+* fix(health): count only byte-addressable internal RAM by @dirkwa in https://github.com/signalk-espOS/espOS/pull/229
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.19.0...v0.19.1
+
 ## 0.19.0 (2026-10-13)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->

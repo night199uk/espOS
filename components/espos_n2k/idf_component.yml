@@ -3,7 +3,7 @@
 ## espos_n2k component manifest: registry metadata for signalk-espos/espos_n2k.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.19.0"
+version: "0.19.1"
 # x-release-please-end
 description: "NMEA 2000 over TWAI: a candump TCP server, and an optional N2K node (address claim, instances, product info)"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_n2k"
@@ -54,7 +54,7 @@ dependencies:
   # use the checkout next to this file; a registry copy has no such directory.
   signalk-espos/espos_config:
     # x-release-please-start-version
-    version: "^0.19.0"
+    version: "^0.19.1"
     # x-release-please-end
     override_path: "../espos_config"
   # mDNS left the IDF core in 5.0; exact-pinned like the other registry deps.

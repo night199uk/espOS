@@ -88,9 +88,9 @@ gives you all of this. What each part is for, in case you start elsewhere:
    ```yaml
    dependencies:
      idf: ">=6.0.0,<6.1.0"
-     signalk-espos/espos_core: "^0.19.0"  # x-release-please-version
-     signalk-espos/espos_sk: "^0.19.0"  # x-release-please-version
-     signalk-espos/espos_ota: "^0.19.0"  # x-release-please-version
+     signalk-espos/espos_core: "^0.19.1"  # x-release-please-version
+     signalk-espos/espos_sk: "^0.19.1"  # x-release-please-version
+     signalk-espos/espos_ota: "^0.19.1"  # x-release-please-version
    ```
 
    Keep the `^`: espOS is pre-1.0, where a minor bump does the work a major
