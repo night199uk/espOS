@@ -333,7 +333,8 @@ static void add_hardware(cJSON *j, const esp_chip_info_t *chip)
      * second; the totals are what distinguishes two boards with the same chip.
      * PSRAM is the one that matters: a P4 with 32 MB and one with none run the
      * same firmware very differently, and only this tells them apart. */
-    cJSON_AddNumberToObject(hw, "ram_internal_bytes", (double)heap_caps_get_total_size(MALLOC_CAP_INTERNAL));
+    cJSON_AddNumberToObject(hw, "ram_internal_bytes",
+                            (double)heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     size_t psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
     cJSON_AddNumberToObject(hw, "ram_psram_bytes", (double)psram);
 
@@ -401,17 +402,19 @@ static esp_err_t info_get(httpd_req_t *req)
      * read without involving free_heap, which on a PSRAM build is MALLOC_CAP_DEFAULT
      * and counts PSRAM -- megabytes free there say nothing about internal RAM.
      *
-     * Plain MALLOC_CAP_INTERNAL for both, deliberately NOT
+     * MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT for both, deliberately NOT
      * esp_get_free_internal_heap_size() (which narrows to 8BIT|DMA): they have to be
      * the same cap set as each other and as espos_health's own sample, or the pair is
-     * two different measurements -- the very mistake documented just below.
+     * two different measurements -- the very mistake documented just below. 8BIT
+     * because a classic ESP32's spare IRAM is internal heap that only 32-bit
+     * accesses may use; counted, it hid ~31 KB of nothing in free_internal.
      *
      * Neither is comparable with the whole-heap pair: MALLOC_CAP_* are independent
      * flags, not a hierarchy, and heap_caps_get_minimum_free_size() SUMS each matching
      * region's own minimum rather than taking a minimum over one pool. */
-    cJSON_AddNumberToObject(j, "free_internal", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    cJSON_AddNumberToObject(j, "free_internal", heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     cJSON_AddNumberToObject(j, "min_internal_free",
-                            heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
+                            heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     cJSON_AddStringToObject(j, "reset_reason", reset_reason_str(esp_reset_reason()));
     cJSON_AddBoolToObject(j, "config_storage_reset", espos_config_storage_was_reset());
     /* The merged tag, not the compiled one: a node that registers its settings

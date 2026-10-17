@@ -433,7 +433,7 @@ static void publish_health(void)
      * and the lowMemory condition live in espos_health's policy, which runs
      * with or without SignalK. */
     snprintf(p, sizeof(p), "%sinternalFree", base);
-    espos_sk_publish_number(p, heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    espos_sk_publish_number(p, heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     snprintf(p, sizeof(p), "%slargestBlock", base);
     espos_sk_publish_number(p, heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     /* From the network seam, not the radio: rssi is 0 when the route is not

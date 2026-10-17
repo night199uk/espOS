@@ -43,16 +43,18 @@ inline int32_t free_heap() {
 // ~30 MB of free SPIRAM hides an internal pool that is nearly gone, and it is
 // internal RAM that a WiFi buffer or a task stack has to come from. A device
 // that has been up for days and stops accepting connections is almost always
-// this, not total heap.
+// this, not total heap. 8BIT too: a classic ESP32's spare IRAM is internal
+// heap that only 32-bit accesses may use, so it holds none of those.
 inline int32_t free_internal() {
-  return static_cast<int32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  return static_cast<int32_t>(
+      heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
 }
 
 // The largest single block of internal RAM. Fragmentation shows up here
 // first: plenty free, none of it contiguous, and the next allocation fails.
 inline int32_t largest_internal_block() {
   return static_cast<int32_t>(
-      heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+      heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
 }
 
 // Why the device last restarted, as the short string a human reads in a

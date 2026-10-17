@@ -276,7 +276,7 @@ measurement:
 | `flash_physical_bytes` | the flash chip's own size, from its JEDEC id (`esp_flash_get_physical_size()`). Absent on firmware older than the field, and if the chip cannot be read |
 | `flash_partitioned_bytes` | where the last partition on the boot flash ends: how much of the chip the partition table uses. The rest is free for a bigger table, which only a USB flash can install |
 | `coprocessor` | **only on a host whose radio is a separate chip**, and only from the first co-processor heartbeat onwards (so: within about 20 s of boot, or never if `CONFIG_ESP_HOSTED_HOST_FEAT_HEARTBEAT` is off). Absence does not distinguish those cases from a board with no co-processor at all. A co-processor whose firmware never announced a version reads `"0.0.0"` — present, answering, silent about itself. See below |
-| `ram_internal_bytes`, `ram_psram_bytes` | **totals**, not free — `free_heap` above is the live number. `ram_psram_bytes: 0` means no PSRAM, which is what separates two boards with the same chip. |
+| `ram_internal_bytes`, `ram_psram_bytes` | **totals**, not free — `free_heap` above is the live number. `ram_internal_bytes` counts byte-addressable internal heap only (`MALLOC_CAP_INTERNAL \| MALLOC_CAP_8BIT`), the same pool as `free_internal`, so a classic ESP32's 32-bit-only IRAM is not in it. `ram_psram_bytes: 0` means no PSRAM, which is what separates two boards with the same chip. |
 | `features` | `wifi`, `ble`, `bt-classic`, `802.15.4`, `embedded-flash`, `embedded-psram`, from `esp_chip_info()`'s bitmask |
 | `board` | **only if the firmware said so** (`espos_start_opts_t.board`); absent otherwise |
 
@@ -305,8 +305,11 @@ should treat it and every member as optional.
 `min_free_heap` and `min_internal_free` are low-water marks since boot; `free_heap` and
 `free_internal` are the live figures beside them. The whole-heap pair asks
 `MALLOC_CAP_DEFAULT` — what a plain `malloc()` may be given — and the internal pair
-`MALLOC_CAP_INTERNAL`. Whether PSRAM is part of the whole-heap pair is a build
-question, not a hardware one: it joins the `malloc()` heap only when
+`MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT`. The `8BIT` matters on a classic ESP32: the
+IRAM left over after code is internal heap there too, but only 32-bit accesses may use
+it, so no buffer, stack or WiFi frame can come from it, and counting it would add
+about 31 KB that no allocation can get. Whether PSRAM is part of the whole-heap pair
+is a build question, not a hardware one: it joins the `malloc()` heap only when
 `CONFIG_SPIRAM_USE_MALLOC` says so, and `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` then
 decides how much still comes from internal RAM.
 

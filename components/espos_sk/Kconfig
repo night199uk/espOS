@@ -133,10 +133,13 @@ menu "espOS SignalK"
         range 8 64
         help
             A handshake is refused, and retried after the usual backoff, unless
-            this much *contiguous* internal RAM is free. Checked with
-            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL): total free
-            heap is the wrong number on a PSRAM board, where tens of megabytes
-            can hide the few kilobytes of internal RAM that actually matter.
+            this much *contiguous* RAM is free in the pool mbedTLS allocates
+            from: heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL |
+            MALLOC_CAP_8BIT), or (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) when
+            CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC puts mbedTLS in PSRAM. Total
+            free heap is the wrong number on a PSRAM board, where tens of
+            megabytes can hide the few kilobytes of internal RAM that
+            actually matter.
 
             What it prevents is not a clean out-of-memory error. mbedTLS
             failing to allocate mid-handshake leaves a half-built session and a

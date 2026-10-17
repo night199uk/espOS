@@ -61,8 +61,13 @@ void espos_health_port_heap(espos_health_heap_t *out)
 {
     out->total_free = esp_get_free_heap_size();
     out->total_min = esp_get_minimum_free_heap_size();
-    out->internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    out->internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+    /* 8BIT as well as INTERNAL: on a classic ESP32 the IRAM left over after
+     * code is heap too, but 32-bit access only, so no byte buffer, stack or
+     * WiFi frame can come from it. Counting it reported ~50 KB internal free
+     * on a HALMET whose malloc() heap was down to 18 KB, and the alarm that
+     * finally fired blamed fragmentation for what was exhaustion. */
+    out->internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    out->internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     out->largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 }
 
