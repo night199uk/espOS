@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Dirk Wahrheit
+# SPDX-License-Identifier: Apache-2.0
+## espos_sdlog component manifest: registry metadata for signalk-espos/espos_sdlog.
+## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
+# x-release-please-start-version
+version: "0.19.1"
+# x-release-please-end
+description: "microSD for espOS: a card over SDMMC or SPI, and sessions of rows on it that survive a power cut"
+url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_sdlog"
+repository: "https://github.com/signalk-espOS/espOS.git"
+documentation: "https://github.com/signalk-espOS/espOS/blob/main/docs/sdlog.md"
+issues: "https://github.com/signalk-espOS/espOS/issues"
+license: "Apache-2.0"
+maintainers:
+  - "Dirk Wahrheit <dirkwahrheit@gmail.com>"
+tags:
+  - signalk
+  - marine
+  - esp-idf
+  - espos
+  - microsd
+  - sd-card
+  - logging
+files:
+  exclude:
+    - "build/**/*"
+    - "build-*/**/*"
+    - "sdkconfig*"
+    - "managed_components/**/*"
+    - "dependencies.lock"
+    - "examples/*/build/**/*"
+    - "examples/*/build-*/**/*"
+    - "examples/*/managed_components/**/*"
+    - "examples/*/dependencies.lock"
+    # The GENERATED sdkconfig only. Not "sdkconfig*": that glob also matched
+    # the tracked sdkconfig.defaults[.<target>] files, which for an example
+    # without the prologue ARE the example -- a downloaded from_registry was
+    # missing the nine settings espos_core then refused to build without.
+    - "examples/*/sdkconfig"
+    - "examples/*/sdkconfig.old"
+    - "examples/*/*.pem"
+dependencies:
+  idf: ">=6.0.0,<6.1.0"

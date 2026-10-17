@@ -90,7 +90,7 @@ plugins:
             components/espos_event/include components/espos_flow/include components/espos_formulas/include
             components/espos_health/include components/espos_httpd/include
             components/espos_log/include components/espos_n2k/include
-            components/espos_net/include components/espos_ota/include components/espos_power/include components/espos_prov/include
+            components/espos_net/include components/espos_ota/include components/espos_power/include components/espos_prov/include components/espos_sdlog/include
             components/espos_sensors/include components/espos_sk/include components/espos_sk_flow/include components/espos_time/include
             components/espos_usb_storage/include
             components/espos_voice/include components/espos_wifi/include
@@ -153,6 +153,7 @@ nav:
       - Power and deep sleep: power.md
       - BLE gateway: ble.md
       - NMEA 2000 gateway: n2k.md
+      - microSD logging: sdlog.md
       - USB storage bridge: usb-storage.md
       - Voice satellite: voice.md
   - Reference:

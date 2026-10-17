@@ -426,6 +426,8 @@ jobs:
           - { example: components/espos_power/examples/duty_cycle, target: esp32c6 }
           - { example: components/espos_power/examples/duty_cycle, target: esp32p4 }
           - { example: components/espos_prov/examples/ble_provisioning, target: esp32c6 }
+          - { example: components/espos_sdlog/examples/sd_logger, target: esp32c6 }
+          - { example: components/espos_sdlog/examples/sd_logger, target: esp32p4 }
     steps:
       - uses: actions/checkout@v7
         with:

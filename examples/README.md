@@ -1,6 +1,6 @@
 # Examples
 
-Eleven complete ESP-IDF projects, one per thing a device built on espOS
+Complete ESP-IDF projects, one per thing a device built on espOS
 does. Each lives under the component it shows off, builds on its own for
 every supported target, and replaces a SensESP example — the table says
 which, so a reader coming from SensESP knows where to look.
@@ -29,6 +29,7 @@ threading, boot order, the server's REST tree, TLS.
 | `ethernet` | Newbie | an espOS device on a cable: the whole firmware is `espos_start()`, WiFi off, the route on wired Ethernet | — (SensESP's `p4_ethernet`) | `components/espos_eth/examples/ethernet` |
 | `usb_storage_follow` | Advanced | the board's microSD as a USB stick for a chartplotter, with espOS following the files the plotter appends to (ESP32-P4 and ESP32-S3 only: it needs USB OTG) | — (SensESP has no equivalent) | `components/espos_usb_storage/examples/usb_storage_follow` |
 | `duty_cycle` | Advanced | a device on a battery: wake, publish, flush, deep-sleep, again — and how it stays reachable | — (SensESP has no equivalent) | `components/espos_power/examples/duty_cycle` |
+| `sd_logger` | Newbie | rows onto a microSD card in sessions that survive a power cut | — | `components/espos_sdlog/examples/sd_logger` |
 | `ble_provisioning` | Advanced | WiFi credentials handed over BLE instead of the setup portal, with the Python client that speaks it | — (SensESP has no equivalent) | `components/espos_prov/examples/ble_provisioning` |
 
 The three below are the same ideas as a **data-flow graph**, in C++. Nothing
