@@ -178,7 +178,7 @@ export function startMock(port = 8484): http.Server {
   }
   const sk = {
     token: { state: "no_server", has_token: false, busy: false, last_http_status: 0, last_error: "", counts: { requests: 0, approved: 0, denied: 0, unauthorized: 0 } } as SkToken,
-    server: { source: "none" } as SkServer, client_id: "9cf791de-aa92-4830-a958-0388a42ef72b", description: "espOS espos-1a2b", permissions: "readwrite",
+    server: { source: "none" } as SkServer, client_id: "9cf791de-aa92-4830-a958-0388a42ef72b", vessel_context: "vessels.urn:mrn:signalk:uuid:3d0b5a1e-6f2c-4b8e-9d71-5c4a2e8f1b07", description: "espOS espos-1a2b", permissions: "readwrite",
     discovery: { enabled: true, count: 0, last_s: null as number | null },
     ws: { enabled: true, connected: false, reconnects: 0, sent: 0, send_errors: 0, pending: 0, buffered: 0, buffered_bytes: 0, dropped: 0, last_error: "", meta: { declared: 3, reconciled: 0 }, in: { subs: 2, frames: 0, received: 0 }, put: { pending: 0, ok: 0, failed: 0 } },
   };

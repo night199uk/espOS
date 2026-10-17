@@ -79,6 +79,35 @@ esp_err_t espos_sk_publish_bool(const char *path, bool value);
 esp_err_t espos_sk_publish_json(const char *path, const char *value_json);
 
 /**
+ * Publish for another vessel: a dinghy logger relaying its own sounder to the
+ * mothership's server, a sensor reporting for a boat it is not on.
+ * `context` is a full SignalK context, usually espos_sk_vessel_context() or
+ * "vessels.urn:mrn:signalk:mmsi:<mmsi>"; NULL is refused (ESP_ERR_INVALID_ARG)
+ * rather than read as vessels.self. Batched, buffered and timestamped like the
+ * calls above; a batch window sends one delta per context.
+ *
+ * For live data only. The server takes the newest delta it receives as the
+ * vessel's current state whatever its timestamp (signalk-server
+ * src/deltacache.ts), so data recorded hours ago belongs in a batch upload,
+ * not here. A write-permission token may publish any context unless the
+ * server's ACLs say otherwise.
+ */
+esp_err_t espos_sk_publish_number_ctx(const char *context, const char *path, double value);
+esp_err_t espos_sk_publish_string_ctx(const char *context, const char *path, const char *value);
+esp_err_t espos_sk_publish_bool_ctx(const char *context, const char *path, bool value);
+esp_err_t espos_sk_publish_json_ctx(const char *context, const char *path, const char *value_json);
+
+/**
+ * This device's own vessel, "vessels.urn:mrn:signalk:uuid:<uuid>": for a
+ * device that is a vessel of its own (a dinghy, a tender) rather than a part
+ * of the boat whose server it talks to. The UUID is generated on the first
+ * espos_sk_start() and kept in NVS, so it survives reboots and OTA; erasing
+ * NVS makes a new vessel. NULL before espos_sk_start() or when NVS cannot hold
+ * it. Also in the status document as `vessel_context`.
+ */
+const char *espos_sk_vessel_context(void);
+
+/**
  * Raise or clear a SignalK notification under notifications.espos.LABEL.KEY (the device label and the condition key).
  *
  * For conditions the device knows about and an operator would want to see:

@@ -132,7 +132,7 @@ export interface SkStatus {
     next_action_s?: number; last_check_s?: number; last_http_status: number; last_error: string;
     counts: { requests: number; approved: number; denied: number; unauthorized: number; cert_errors?: number } };
   server: { host?: string; port?: number; self?: string; source: "discovered" | "manual" | "pinned" | "none"; scheme?: "http" | "https"; name?: string; swname?: string; swvers?: string; by_self?: boolean };
-  ws?: SkWs; client_id: string; description: string; permissions: string;
+  ws?: SkWs; client_id: string; vessel_context?: string; description: string; permissions: string;
   discovery: { enabled: boolean; count: number; last_s: number | null };
 }
 export interface SystemInfo {

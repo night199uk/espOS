@@ -135,6 +135,81 @@ TEST_CASE("publish validation and pending overflow", "[delta]")
     espos_sk_delta_destroy(d);
 }
 
+#define DINGHY "vessels.urn:mrn:signalk:uuid:6f1c2a3e-1b7d-4c55-9a0e-2d4f8b9c0a11"
+
+TEST_CASE("contexts: one window sends one delta per context, self untouched", "[delta]")
+{
+    espos_sk_delta_t *d = mk(8, 0, 20);
+    TEST_ESP_OK(espos_sk_delta_publish(d, "environment.depth.belowTransducer", "4.2", 1000));
+    TEST_ESP_OK(espos_sk_delta_publish_ctx(d, DINGHY, "environment.depth.belowTransducer", "1.5", 1010));
+    TEST_ESP_OK(espos_sk_delta_publish_ctx(d, DINGHY, "environment.depth.belowTransducer", "1.6", 1020)); /* replaces */
+    TEST_ESP_OK(espos_sk_delta_publish_ctx(d, "vessels.self", "navigation.speedOverGround", "2", 1030));
+    char *m = espos_sk_delta_take(d, 1100, true);
+    TEST_ASSERT_NOT_NULL(m);
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"context\":\"vessels.self\",\"updates\":[{\"source\":{\"label\":\"espos-1a2b\"},\"values\":["
+        "{\"path\":\"environment.depth.belowTransducer\",\"value\":4.2},"
+        "{\"path\":\"navigation.speedOverGround\",\"value\":2}]}]}",
+        m);
+    free(m);
+    m = espos_sk_delta_take(d, 1200, true);
+    TEST_ASSERT_NOT_NULL(m);
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"context\":\"" DINGHY "\",\"updates\":[{\"source\":{\"label\":\"espos-1a2b\"},\"values\":["
+        "{\"path\":\"environment.depth.belowTransducer\",\"value\":1.6}]}]}",
+        m);
+    free(m);
+    espos_sk_delta_stats_t st;
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(2, st.built);
+    espos_sk_delta_destroy(d);
+}
+
+TEST_CASE("contexts: a fifth context closes the window early, nothing is lost", "[delta]")
+{
+    espos_sk_delta_t *d = mk(16, 0, 1000);
+    for (int i = 0; i < ESPOS_SK_CONTEXTS_MAX + 1; i++) {
+        char c[48];
+        snprintf(c, sizeof(c), "vessels.urn:mrn:signalk:mmsi:21100000%d", i);
+        TEST_ESP_OK(espos_sk_delta_publish_ctx(d, c, "a.b", "1", 1000));
+    }
+    espos_sk_delta_stats_t st;
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(ESPOS_SK_CONTEXTS_MAX, st.built);
+    TEST_ASSERT_EQUAL(1, st.pending);
+    espos_sk_delta_flush(d, 1000);
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(ESPOS_SK_CONTEXTS_MAX + 1, st.built);
+    for (int i = 0; i < ESPOS_SK_CONTEXTS_MAX + 1; i++) {
+        char *m = espos_sk_delta_take(d, 2000 + i * 10, true);
+        TEST_ASSERT_NOT_NULL(m);
+        char c[48];
+        snprintf(c, sizeof(c), "\"vessels.urn:mrn:signalk:mmsi:21100000%d\"", i);
+        TEST_ASSERT_NOT_NULL(strstr(m, c));
+        free(m);
+    }
+    espos_sk_delta_destroy(d);
+}
+
+TEST_CASE("contexts: validation keeps the context from breaking the JSON", "[delta]")
+{
+    espos_sk_delta_t *d = mk(8, 0, 20);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, espos_sk_delta_publish_ctx(d, "", "a", "1", 0));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, espos_sk_delta_publish_ctx(d, "vessels.\"x", "a", "1", 0));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, espos_sk_delta_publish_ctx(d, "vessels.\\x", "a", "1", 0));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, espos_sk_delta_publish_ctx(d, "vessels.\nx", "a", "1", 0));
+    char longc[ESPOS_SK_CONTEXT_MAX + 1];
+    memset(longc, 'v', sizeof(longc) - 1);
+    longc[sizeof(longc) - 1] = '\0';
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_SIZE, espos_sk_delta_publish_ctx(d, longc, "a", "1", 0));
+    longc[ESPOS_SK_CONTEXT_MAX - 1] = '\0';
+    TEST_ESP_OK(espos_sk_delta_publish_ctx(d, longc, "a", "1", 0));
+    espos_sk_delta_stats_t st;
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(1, st.pending);
+    espos_sk_delta_destroy(d);
+}
+
 TEST_CASE("json helpers", "[delta]")
 {
     char b[64];
@@ -292,5 +367,27 @@ TEST_CASE("timestamps: the clock can be turned off again, and the monotonic wrap
     TEST_ASSERT_NOT_NULL(m);
     TEST_ASSERT_NULL(strstr(m, "timestamp"));
     free(m);
+    espos_sk_delta_destroy(d);
+}
+
+TEST_CASE("contexts: every message of a window gets the window's timestamp", "[delta]")
+{
+    espos_sk_delta_t *d = mk(8, 0, 1000);
+    s_wall_ms = 1789000000000LL;
+    espos_sk_delta_set_clock(d, fake_wall, NULL);
+    TEST_ESP_OK(espos_sk_delta_publish(d, "a.b", "1", 1000));
+    TEST_ESP_OK(espos_sk_delta_publish_ctx(d, DINGHY, "a.b", "2", 1050));
+    char *m1 = espos_sk_delta_take(d, 1100, true);
+    s_wall_ms += 10; /* the clock moves on with the monotonic one */
+    char *m2 = espos_sk_delta_take(d, 1110, true);
+    TEST_ASSERT_NOT_NULL(m1);
+    TEST_ASSERT_NOT_NULL(m2);
+    const char *t1 = strstr(m1, "\"timestamp\":\"");
+    const char *t2 = strstr(m2, "\"timestamp\":\"");
+    TEST_ASSERT_NOT_NULL(t1);
+    TEST_ASSERT_NOT_NULL(t2);
+    TEST_ASSERT_EQUAL_STRING_LEN(t1, t2, 39);
+    free(m1);
+    free(m2);
     espos_sk_delta_destroy(d);
 }

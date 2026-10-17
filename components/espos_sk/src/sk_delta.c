@@ -10,7 +10,10 @@
 typedef struct {
     char path[ESPOS_SK_PATH_MAX];
     char value[ESPOS_SK_VALUE_MAX];
+    uint8_t ctx; /* index into espos_sk_delta.ctx, in order of first publish */
 } pending_t;
+
+#define SELF_CONTEXT "vessels.self"
 
 /* A queued message and the monotonic instant its values were batched. The
  * stamp is kept beside the text rather than written into it because the wall
@@ -28,6 +31,13 @@ struct espos_sk_delta {
     char label[40];
     pending_t pending[ESPOS_SK_PENDING_MAX];
     size_t pending_n;
+    /* The contexts the open window holds values for. A delta carries one
+     * context, so each becomes its own message when the window closes; a
+     * small table rather than a context per pending value, because a device
+     * publishing for another vessel publishes for one or two, and the
+     * difference is 2.5 KB of RAM on a classic ESP32. */
+    char ctx[ESPOS_SK_CONTEXTS_MAX][ESPOS_SK_CONTEXT_MAX];
+    size_t ctx_n;
     uint32_t pending_since_ms;
     queued_t *ring;           /* messages, oldest at head */
     size_t head, count;
@@ -167,46 +177,107 @@ void espos_sk_delta_requeue(espos_sk_delta_t *d, char *msg)
 
 /* --------------------------------------------------------- pending */
 
+/* The context is copied into the message as it is, so it must not be able to
+ * end the JSON string it lands in. */
+static esp_err_t context_check(const char *c)
+{
+    if (!*c) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strlen(c) >= ESPOS_SK_CONTEXT_MAX) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    for (; *c; c++) {
+        if ((unsigned char)*c < 0x20 || *c == '"' || *c == '\\') {
+            return ESP_ERR_INVALID_ARG;
+        }
+    }
+    return ESP_OK;
+}
+
+/* Index of `context` in the window's table, adding it when there is room;
+ * -1 when the table is full. */
+static int context_slot(espos_sk_delta_t *d, const char *context)
+{
+    for (size_t i = 0; i < d->ctx_n; i++) {
+        if (strcmp(d->ctx[i], context) == 0) {
+            return (int)i;
+        }
+    }
+    if (d->ctx_n == ESPOS_SK_CONTEXTS_MAX) {
+        return -1;
+    }
+    strcpy(d->ctx[d->ctx_n], context);
+    return (int)d->ctx_n++;
+}
+
 esp_err_t espos_sk_delta_publish(espos_sk_delta_t *d, const char *path, const char *value_json, uint32_t now_ms)
+{
+    return espos_sk_delta_publish_ctx(d, NULL, path, value_json, now_ms);
+}
+
+esp_err_t espos_sk_delta_publish_ctx(espos_sk_delta_t *d, const char *context, const char *path, const char *value_json,
+                                     uint32_t now_ms)
 {
     if (!d || !path || !*path || !value_json || !*value_json) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (!context) {
+        context = SELF_CONTEXT;
+    }
+    esp_err_t err = context_check(context);
+    if (err != ESP_OK) {
+        return err;
+    }
     if (strlen(path) >= ESPOS_SK_PATH_MAX || strlen(value_json) >= ESPOS_SK_VALUE_MAX) {
         return ESP_ERR_INVALID_SIZE;
     }
-    for (size_t i = 0; i < d->pending_n; i++) {
-        if (strcmp(d->pending[i].path, path) == 0) {
-            strcpy(d->pending[i].value, value_json); /* newest wins within the window */
-            return ESP_OK;
+    int ctx = context_slot(d, context);
+    if (ctx >= 0) {
+        for (size_t i = 0; i < d->pending_n; i++) {
+            if (d->pending[i].ctx == ctx && strcmp(d->pending[i].path, path) == 0) {
+                strcpy(d->pending[i].value, value_json); /* newest wins within the window */
+                return ESP_OK;
+            }
         }
     }
-    if (d->pending_n == ESPOS_SK_PENDING_MAX) {
+    if (ctx < 0 || d->pending_n == ESPOS_SK_PENDING_MAX) {
         espos_sk_delta_flush(d, now_ms); /* window overflow: close it early */
+        ctx = context_slot(d, context);
     }
     if (d->pending_n == 0) {
         d->pending_since_ms = now_ms;
     }
     strcpy(d->pending[d->pending_n].path, path);
     strcpy(d->pending[d->pending_n].value, value_json);
+    d->pending[d->pending_n].ctx = (uint8_t)ctx;
     d->pending_n++;
     d->st.pending = d->pending_n;
     return ESP_OK;
 }
 
-static char *build_message(espos_sk_delta_t *d)
+static char *build_message(espos_sk_delta_t *d, uint8_t ctx)
 {
-    size_t need = 96 + strlen(d->label);
+    size_t need = 96 + strlen(d->label) + strlen(d->ctx[ctx]);
     for (size_t i = 0; i < d->pending_n; i++) {
-        need += 24 + strlen(d->pending[i].path) + strlen(d->pending[i].value);
+        if (d->pending[i].ctx == ctx) {
+            need += 24 + strlen(d->pending[i].path) + strlen(d->pending[i].value);
+        }
     }
     char *m = malloc(need);
     if (!m) {
         return NULL;
     }
-    int n = snprintf(m, need, "{\"context\":\"vessels.self\",\"updates\":[{\"source\":{\"label\":\"%s\"},\"values\":[", d->label);
+    int n = snprintf(m, need, "{\"context\":\"%s\",\"updates\":[{\"source\":{\"label\":\"%s\"},\"values\":[", d->ctx[ctx],
+                     d->label);
+    bool first = true;
     for (size_t i = 0; i < d->pending_n; i++) {
-        n += snprintf(m + n, need - n, "%s{\"path\":\"%s\",\"value\":%s}", i ? "," : "", d->pending[i].path, d->pending[i].value);
+        if (d->pending[i].ctx != ctx) {
+            continue;
+        }
+        n += snprintf(m + n, need - n, "%s{\"path\":\"%s\",\"value\":%s}", first ? "" : ",", d->pending[i].path,
+                      d->pending[i].value);
+        first = false;
     }
     snprintf(m + n, need - n, "]}]}");
     return m;
@@ -217,7 +288,6 @@ void espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms)
     if (!d || d->pending_n == 0) {
         return;
     }
-    char *m = build_message(d);
     /* The values in this batch were published between pending_since_ms and
      * now; the batch window is at most a few hundred milliseconds wide, so the
      * instant it closed dates all of them well enough. Recording it here — not
@@ -225,12 +295,23 @@ void espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms)
      * time it was measured rather than the time it was finally sent. */
     uint32_t batch_ms = d->pending_since_ms;
     (void)now_ms;
-    d->pending_n = 0;
-    d->st.pending = 0;
-    if (m) {
-        d->st.built++;
-        ring_push(d, m, batch_ms);
+    for (size_t c = 0; c < d->ctx_n; c++) {
+        bool used = false;
+        for (size_t i = 0; i < d->pending_n && !used; i++) {
+            used = d->pending[i].ctx == c;
+        }
+        if (!used) {
+            continue;
+        }
+        char *m = build_message(d, (uint8_t)c);
+        if (m) {
+            d->st.built++;
+            ring_push(d, m, batch_ms);
+        }
     }
+    d->pending_n = 0;
+    d->ctx_n = 0;
+    d->st.pending = 0;
 }
 
 static bool batch_due(const espos_sk_delta_t *d, uint32_t now_ms)

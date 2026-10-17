@@ -123,12 +123,37 @@ Design points from the plan, all implemented:
 API: thread-safe, never blocks, works before WiFi is up (but only after `espos_sk_start()` — earlier calls return `ESP_ERR_INVALID_STATE`). Values are for
 `vessels.self`; the source label is `espos.<hostname>`.
 
+**Another vessel.** `espos_sk_publish_number/string/bool/json_ctx(context,
+path, value)` publish the same way for any context, which is how a dinghy
+logger relays its sounder to the mothership's server as a boat of its own.
+`espos_sk_vessel_context()` gives the device's own one,
+`vessels.urn:mrn:signalk:uuid:<uuid>`, with the UUID generated on the first
+`espos_sk_start()` and kept in NVS (namespace `skstate`, key `vessel_id`),
+apart from the clientId: it survives reboots and OTA and is new only after
+an NVS erase. The status document shows it as `vessel_context`. A batch
+window holds values for up to four contexts and sends one delta per context,
+since a delta carries only one. The `_ctx` calls refuse a NULL context
+rather than read it as `vessels.self`.
+
+These are for live data. signalk-server keeps a delta's timestamp
+(`src/index.ts`), but its full model takes the newest delta it receives as
+the vessel's current state without comparing timestamps
+(`src/deltacache.ts`, `ingestDelta`), the staleness check flags old values
+at once, and every plugin and client receives them as if they had just
+happened. Replaying hours of recorded data this way walks the vessel back
+through its old positions; recorded data goes to its consumer as a batch
+upload instead. The offline ring below is the short version of the same
+replay, and acceptable for it: it holds a bounded outage (32 KiB by
+default), drains oldest first and ends on current values.
+
 Pipeline (`sk_delta.c`, pure C, unit-tested; `sk_ws.c` = the transport
 task):
 
 1. **Batching window** (`sk.batch_ms`, default 100 ms): everything
-   published inside one window becomes one delta message with one update;
-   a path published twice in a window keeps the last value. Numbers use
+   published inside one window becomes one delta message per context,
+   carrying that context's paths (a device that publishes only for
+   `vessels.self` sends one message per window); a path published twice
+   in a window for the same context keeps the last value. Numbers use
    the shortest round-trip representation.
 2. **Ring buffer** while the stream is down (`sk.buffer_msgs` /
    `sk.buffer_kb`, default 128 messages / 32 KiB): oldest messages are

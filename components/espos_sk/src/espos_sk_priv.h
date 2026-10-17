@@ -15,6 +15,9 @@ extern "C" {
 /* Persistent device state (NVS namespace "skstate"): sk_store.c */
 esp_err_t espos_sk_store_load(espos_sk_tok_store_t *out, char client_id[40]);
 esp_err_t espos_sk_store_save(const espos_sk_tok_store_t *st);
+/* The device's own vessel UUID, generated and stored on first use; "" and an
+ * error when NVS cannot hold it. */
+esp_err_t espos_sk_store_vessel_uuid(char uuid[40]);
 
 /* Server choice (sk_select.c, pure). The anchor is the server the stored
  * token -- or, without one, the pending request -- was issued by. Its fields

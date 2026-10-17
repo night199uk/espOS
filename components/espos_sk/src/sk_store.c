@@ -110,6 +110,47 @@ esp_err_t espos_sk_store_load(espos_sk_tok_store_t *out, char client_id[40])
     return ESP_OK;
 }
 
+/* Kept apart from the clientId: that one names the device to the server's
+ * security, this one names a vessel in the data, and a user who replaces the
+ * board in a dinghy may one day want to carry the vessel over without the
+ * access grant. Never generated volatile: a vessel that is new on every boot
+ * splits one boat's soundings across a fresh identity each time. */
+esp_err_t espos_sk_store_vessel_uuid(char uuid[40])
+{
+    uuid[0] = '\0';
+    nvs_handle_t h;
+    esp_err_t err = open_ns(&h);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "cannot open state namespace: %s; no vessel UUID", esp_err_to_name(err));
+        return err;
+    }
+    size_t len = 40;
+    err = nvs_get_str(h, "vessel_id", uuid, &len);
+    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+        /* A vessel that exists but cannot be read now must not be replaced:
+         * a new UUID written over it would split the boat's data for good. */
+        ESP_LOGE(TAG, "cannot read the vessel UUID: %s", esp_err_to_name(err));
+        uuid[0] = '\0';
+        nvs_close(h);
+        return err;
+    }
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        make_uuid(uuid);
+        err = nvs_set_str(h, "vessel_id", uuid);
+        if (err == ESP_OK) {
+            err = nvs_commit(h);
+        }
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "cannot store the vessel UUID: %s", esp_err_to_name(err));
+            uuid[0] = '\0';
+        } else {
+            ESP_LOGI(TAG, "generated vessel UUID %s", uuid);
+        }
+    }
+    nvs_close(h);
+    return err;
+}
+
 static esp_err_t set_or_erase(nvs_handle_t h, const char *key, const char *val)
 {
     if (val[0]) {

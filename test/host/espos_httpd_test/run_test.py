@@ -2029,6 +2029,10 @@ class SkTests(unittest.TestCase):
         self.assertEqual(js["server"]["source"], "discovered")
         self.assertTrue(js["token"]["pending_href"].startswith("/signalk/v1/requests/"))
         self.assertEqual(len(js["client_id"]), 36)
+        # The device's own vessel, generated once and separate from the clientId.
+        self.assertTrue(js["vessel_context"].startswith("vessels.urn:mrn:signalk:uuid:"))
+        self.assertEqual(len(js["vessel_context"]), len("vessels.urn:mrn:signalk:uuid:") + 36)
+        self.assertNotIn(js["client_id"], js["vessel_context"])
         self.assertEqual(js["description"], "espOS espos-1a2b")
         self.assertEqual(js["permissions"], "readwrite")
         st, _, _, srv = req("GET", "/api/v1/sk/servers")

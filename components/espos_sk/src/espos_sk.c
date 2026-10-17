@@ -27,6 +27,7 @@
 #include "espos_httpd_sse.h"
 #include "espos_net.h"
 #include "espos_sk.h"
+#include "espos_sk_delta.h"
 #include "espos_sk_priv.h"
 #if CONFIG_ESPOS_SK_TLS
 #include "espos_sk_tls.h"
@@ -99,6 +100,7 @@ static struct {
     espos_sk_tok_status_t snap;
     char snap_token[ESPOS_SK_TOKEN_MAX];
     char client_id[40];
+    char vessel_context[ESPOS_SK_CONTEXT_MAX]; /* written once in espos_sk_start(), read-only after */
     espos_sk_discovered_t servers[ESPOS_SK_MAX_SERVERS];
     uint32_t avoid_until_ms[ESPOS_SK_MAX_SERVERS]; /* unreachable discovered servers are skipped for a while */
     /* Discovery rounds, among those anyone answered, in which the anchored
@@ -1067,6 +1069,7 @@ static char *status_json_from(const espos_sk_tok_status_t *st, const char *sourc
     cJSON *disc = cJSON_AddObjectToObject(root, "discovery");
     lock();
     cJSON_AddStringToObject(root, "client_id", s.client_id);
+    cJSON_AddStringToObject(root, "vessel_context", s.vessel_context);
     cJSON_AddStringToObject(root, "description", s.cfg.description);
     cJSON_AddStringToObject(root, "permissions", s.cfg.permissions);
     /* What is actually running, not merely what the flag says: a manual
@@ -1226,6 +1229,11 @@ const char *espos_sk_client_id(void)
     return s.client_id;
 }
 
+const char *espos_sk_vessel_context(void)
+{
+    return s.vessel_context[0] ? s.vessel_context : NULL;
+}
+
 /* The stream may run when the token is approved, or when the server has
  * security disabled (OPEN: no token needed). */
 bool espos_sk_stream_allowed(void)
@@ -1277,6 +1285,14 @@ esp_err_t espos_sk_start(void)
     /* hostname for the request description: espos_net's, the same name the
      * mDNS responder answers to (net.hostname, default espos-<id>) */
     snprintf(s.hostname, sizeof(s.hostname), "%s", net.hostname[0] ? net.hostname : "espos");
+    /* Here rather than on the SK task, so the context is there for the
+     * caller as soon as start returns. */
+    if (!s.vessel_context[0]) {
+        char uuid[40];
+        if (espos_sk_store_vessel_uuid(uuid) == ESP_OK) {
+            snprintf(s.vessel_context, sizeof(s.vessel_context), "vessels.urn:mrn:signalk:uuid:%s", uuid);
+        }
+    }
     espos_sk_discovery_init(s.hostname);
     if (!s.api_registered) {
         ESP_ERROR_CHECK(espos_sk_register_api());

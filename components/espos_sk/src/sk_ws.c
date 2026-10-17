@@ -170,25 +170,18 @@ void espos_sk_ws_config_changed(void)
 
 /* ----------------------------------------------------------- publish */
 
-static esp_err_t publish(const char *path, const char *value_json)
+static esp_err_t publish(const char *context, const char *path, const char *value_json)
 {
     if (!s.lock || !s.delta) {
         return ESP_ERR_INVALID_STATE;
     }
     lock();
-    esp_err_t err = espos_sk_delta_publish(s.delta, path, value_json, now_ms());
+    esp_err_t err = espos_sk_delta_publish_ctx(s.delta, context, path, value_json, now_ms());
     unlock();
     return err;
 }
 
-esp_err_t espos_sk_publish_number(const char *path, double value)
-{
-    char v[32];
-    espos_sk_json_number(v, sizeof(v), value);
-    return publish(path, v);
-}
-
-esp_err_t espos_sk_publish_string(const char *path, const char *value)
+static esp_err_t publish_string(const char *context, const char *path, const char *value)
 {
     if (!value) {
         return ESP_ERR_INVALID_ARG;
@@ -197,17 +190,57 @@ esp_err_t espos_sk_publish_string(const char *path, const char *value)
     if (espos_sk_json_string(v, sizeof(v), value) <= 0 || strlen(value) * 2 + 2 >= sizeof(v)) {
         return ESP_ERR_INVALID_SIZE;
     }
-    return publish(path, v);
+    return publish(context, path, v);
+}
+
+static esp_err_t publish_number(const char *context, const char *path, double value)
+{
+    char v[32];
+    espos_sk_json_number(v, sizeof(v), value);
+    return publish(context, path, v);
+}
+
+esp_err_t espos_sk_publish_number(const char *path, double value)
+{
+    return publish_number(NULL, path, value);
+}
+
+esp_err_t espos_sk_publish_string(const char *path, const char *value)
+{
+    return publish_string(NULL, path, value);
 }
 
 esp_err_t espos_sk_publish_bool(const char *path, bool value)
 {
-    return publish(path, value ? "true" : "false");
+    return publish(NULL, path, value ? "true" : "false");
 }
 
 esp_err_t espos_sk_publish_json(const char *path, const char *value_json)
 {
-    return publish(path, value_json);
+    return publish(NULL, path, value_json);
+}
+
+/* The _ctx calls insist on a context: NULL means vessels.self to the engine,
+ * and another vessel's data landing on self is the one mistake here that
+ * corrupts the boat's own model instead of failing. */
+esp_err_t espos_sk_publish_number_ctx(const char *context, const char *path, double value)
+{
+    return context ? publish_number(context, path, value) : ESP_ERR_INVALID_ARG;
+}
+
+esp_err_t espos_sk_publish_string_ctx(const char *context, const char *path, const char *value)
+{
+    return context ? publish_string(context, path, value) : ESP_ERR_INVALID_ARG;
+}
+
+esp_err_t espos_sk_publish_bool_ctx(const char *context, const char *path, bool value)
+{
+    return context ? publish(context, path, value ? "true" : "false") : ESP_ERR_INVALID_ARG;
+}
+
+esp_err_t espos_sk_publish_json_ctx(const char *context, const char *path, const char *value_json)
+{
+    return context ? publish(context, path, value_json) : ESP_ERR_INVALID_ARG;
 }
 
 esp_err_t espos_sk_declare_meta(const char *path, const char *meta_json, uint32_t period_ms)

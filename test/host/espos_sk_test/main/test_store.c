@@ -100,3 +100,23 @@ TEST_CASE("store: token and pending request round-trip; empties erase", "[sk_sto
     TEST_ESP_OK(espos_sk_store_load(&back, id));
     TEST_ASSERT_EQUAL(ESPOS_SK_TOKEN_MAX - 1, strlen(back.token));
 }
+
+TEST_CASE("store: vessel UUID generated once, kept, and not the clientId", "[sk_store]")
+{
+    fresh();
+    char v1[40], v2[40], cid[40];
+    TEST_ESP_OK(espos_sk_store_vessel_uuid(v1));
+    TEST_ASSERT_EQUAL(36, strlen(v1));
+    TEST_ASSERT_EQUAL('4', v1[14]);
+    (void)nvs_flash_deinit_partition("nvs");
+    TEST_ESP_OK(nvs_flash_init_partition("nvs"));
+    TEST_ESP_OK(espos_sk_store_vessel_uuid(v2));
+    TEST_ASSERT_EQUAL_STRING(v1, v2);
+    espos_sk_tok_store_t st;
+    TEST_ESP_OK(espos_sk_store_load(&st, cid));
+    TEST_ASSERT_TRUE(strcmp(v1, cid) != 0);
+    /* saving the token state leaves the vessel alone */
+    TEST_ESP_OK(espos_sk_store_save(&st));
+    TEST_ESP_OK(espos_sk_store_vessel_uuid(v2));
+    TEST_ASSERT_EQUAL_STRING(v1, v2);
+}

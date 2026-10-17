@@ -5,7 +5,7 @@
  * Delta batcher + offline ring buffer — pure C, no OS calls, host-testable.
  *
  *   publish(path, value)  →  pending (last value per path wins)
- *   after batch_ms         →  one delta message {"context":"vessels.self","updates":[...]}
+ *   after batch_ms         →  one delta message per context {"context":"vessels.self","updates":[...]}
  *   connected              →  message goes out (backlog drains oldest-first, rate-limited)
  *   offline                →  message enters the ring (bounded by count and bytes, oldest dropped)
  *
@@ -27,6 +27,10 @@ extern "C" {
 #define ESPOS_SK_PATH_MAX    96
 #define ESPOS_SK_VALUE_MAX   256
 #define ESPOS_SK_PENDING_MAX 32
+/* "vessels.urn:mrn:signalk:uuid:" plus a 36-character UUID is 65. */
+#define ESPOS_SK_CONTEXT_MAX 80
+/* Distinct contexts one batch window holds before it closes early. */
+#define ESPOS_SK_CONTEXTS_MAX 4
 
 typedef struct {
     const char *label;        /* source label, e.g. the hostname */
@@ -52,6 +56,13 @@ void espos_sk_delta_destroy(espos_sk_delta_t *d);
 
 /** value_json is a complete JSON value (number, "string", true, {...}). */
 esp_err_t espos_sk_delta_publish(espos_sk_delta_t *d, const char *path, const char *value_json, uint32_t now_ms);
+/** The same for another context ("vessels.urn:mrn:signalk:uuid:…"); NULL is
+ * vessels.self. A window's values go out as one message per context.
+ * ESP_ERR_INVALID_SIZE for a context of ESPOS_SK_CONTEXT_MAX or more
+ * characters, ESP_ERR_INVALID_ARG for an empty one or one containing a quote,
+ * backslash or control character. */
+esp_err_t espos_sk_delta_publish_ctx(espos_sk_delta_t *d, const char *context, const char *path,
+                                     const char *value_json, uint32_t now_ms);
 
 /** Sender side. Returns a malloc'ed message to transmit now, or NULL.
  * connected=false only batches into the ring. */
