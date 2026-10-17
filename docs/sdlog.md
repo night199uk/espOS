@@ -59,9 +59,9 @@ A session's number is one above the highest ever handed out under the root,
 which `LASTSEQ.TXT` beside the sessions remembers: pruning delivered sessions
 never makes a number come round again. It is unique on one card, not across
 devices or a reformatted card, so a server tells sessions apart by their
-header (a trip id) and recognises a repeated upload by its sha256. What a session
+header (a segment id) and recognises a repeated upload by its sha256. What a session
 means is the caller's: the header is whatever it passes to
-`espos_sdlog_open()` (a trip id, the vessel, the units, the sensor offsets),
+`espos_sdlog_open()` (a segment id, the vessel, the units, the sensor offsets),
 the rows are whatever lines it appends, and `meta` in the close record is
 whatever JSON it passes to `espos_sdlog_close()` (an end time). The component
 counts rows, hashes them and keeps the order of writes that makes a power cut
@@ -151,6 +151,13 @@ that are both closed and synced until the row files under the root add up to
 deleted: a card full of undelivered data stops the logger (an append fails)
 rather than eating what it was there to keep. `espos_sdlog_card_space()` says
 how much is left.
+
+`keep_bytes` counts row bytes only. Every session also takes a directory and
+up to four small files, and on FAT each takes at least one cluster: about
+160 KB a session on a 32 GB card with 32 KB clusters, which is more than the
+rows of a short session. A logger that starts a session at every power-on
+leaves room for that, or prunes against what `espos_sdlog_card_space()`
+reports instead.
 
 ## Sharing the card
 

@@ -100,6 +100,20 @@ static int cmp_seq(const void *a, const void *b)
     return x < y ? -1 : x > y;
 }
 
+/* Only a directory is a session: a file with an eight-digit name is
+ * someone else's, and recover() would otherwise try to remove it as a
+ * session and fail on every boot. */
+static bool is_dir(const char *root, const struct dirent *e)
+{
+    if (e->d_type != DT_UNKNOWN) {
+        return e->d_type == DT_DIR;
+    }
+    char p[PATH_MAX_LEN];
+    struct stat st;
+    int n = snprintf(p, sizeof(p), "%s/%s", root, e->d_name);
+    return n > 0 && (size_t)n < sizeof(p) && stat(p, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
 /* Every session number under root, sorted, in a malloc'd array (NULL when
  * there are none). A missing root has none. */
 static esp_err_t scan(const char *root, uint32_t **out, size_t *count)
@@ -114,7 +128,7 @@ static esp_err_t scan(const char *root, uint32_t **out, size_t *count)
     struct dirent *e;
     while ((e = readdir(d)) != NULL) {
         uint32_t seq;
-        if (!parse_seq(e->d_name, &seq)) {
+        if (!parse_seq(e->d_name, &seq) || !is_dir(root, e)) {
             continue;
         }
         if (*count == cap) {

@@ -16,8 +16,9 @@
  *
  * A session without CLOSE.JSN was cut short. espos_sdlog_recover() closes
  * it at the next boot: the half row is cut off, and the close record says
- * `"clean":false`. Only a closed session is complete enough to upload, and
- * its sha256 is what a server checks the upload against.
+ * `"clean":false`. Every session but the open one is complete enough to
+ * upload, and the sha256 in its close record is what a server checks the
+ * upload against.
  *
  * The names fit 8.3, so the card works with FatFs' default of no long file
  * names. What a session means (a trip, a vessel, units) is the caller's,
@@ -161,6 +162,10 @@ esp_err_t espos_sdlog_remove(const char *root, uint32_t seq);
  * under `root` add up to `keep_bytes` or less. A session that has not
  * reached its server is never deleted, so a full card stops a logger
  * rather than eating its data. `removed` may be NULL.
+ *
+ * `keep_bytes` counts row bytes only: every session also takes a directory
+ * and up to four small files, each at least one cluster of the card. Leave
+ * room for that, or prune against espos_sdlog_card_space().
  */
 esp_err_t espos_sdlog_prune(const char *root, uint64_t keep_bytes, uint32_t *removed);
 

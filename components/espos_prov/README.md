@@ -10,6 +10,6 @@ Part of [espOS](https://github.com/signalk-espOS/espOS), an ESP-IDF runtime for 
 
 **Documentation:** [docs/provisioning.md](https://github.com/signalk-espOS/espOS/blob/main/docs/provisioning.md)
 
-Built on the espOS tree as a git submodule, or installed from the registry; either way `REQUIRES espos_prov` in a component's `CMakeLists.txt` resolves it.
+Installed from the registry, `REQUIRES espos_prov` in a component's `CMakeLists.txt` resolves it. On the espOS tree as a git submodule it is optional, so the project also names it: `espos_project_prologue(... COMPONENTS espos_prov)`.
 
 Apache-2.0. Issues and pull requests: [https://github.com/signalk-espOS/espOS/issues](https://github.com/signalk-espOS/espOS/issues).

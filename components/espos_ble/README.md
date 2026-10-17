@@ -14,6 +14,6 @@ Part of [espOS](https://github.com/signalk-espOS/espOS), an ESP-IDF runtime for 
 
 * [`ble_gateway`](https://github.com/signalk-espOS/espOS/tree/main/components/espos_ble/examples/ble_gateway)
 
-Built on the espOS tree as a git submodule, or installed from the registry; either way `REQUIRES espos_ble` in a component's `CMakeLists.txt` resolves it.
+Installed from the registry, `REQUIRES espos_ble` in a component's `CMakeLists.txt` resolves it. On the espOS tree as a git submodule it is optional, so the project also names it: `espos_project_prologue(... COMPONENTS espos_ble)`.
 
 Apache-2.0. Issues and pull requests: [https://github.com/signalk-espOS/espOS/issues](https://github.com/signalk-espOS/espOS/issues).

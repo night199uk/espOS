@@ -39,6 +39,7 @@ body:
         - espos_ota
         - espos_ble
         - espos_n2k
+        - espos_sdlog
         - espos_usb_storage
         - espos_voice
         - espos_audio

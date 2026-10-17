@@ -424,3 +424,18 @@ TEST_CASE("recover gives a session cut off before its rows file an empty one", "
     TEST_ASSERT_TRUE(info.closed);
     TEST_ASSERT_EQUAL_UINT64(0, info.rows);
 }
+
+TEST_CASE("a file with a session's name is not a session", "[recover]")
+{
+    fresh_root();
+    TEST_ASSERT_EQUAL(0, mkdir(root, 0775));
+    char p[200];
+    snprintf(p, sizeof(p), "%s/00000007", root);
+    write_raw(p, "someone else's");
+
+    uint32_t recovered, removed;
+    TEST_ASSERT_EQUAL(ESP_OK, espos_sdlog_recover(root, &recovered, &removed));
+    TEST_ASSERT_EQUAL_UINT32(0, recovered);
+    TEST_ASSERT_EQUAL_UINT32(0, removed);
+    TEST_ASSERT_EQUAL_STRING("someone else's", slurp(p, NULL));
+}
