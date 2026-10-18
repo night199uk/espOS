@@ -117,8 +117,11 @@ const char *espos_board(void);
  * A binding generated from the headers records the value it was built
  * against and compares it with espos_abi_version() at run time.
  */
-#define ESPOS_ABI_VERSION 7
+#define ESPOS_ABI_VERSION 8
 /* History, so that a binding pinned to an older value can tell what moved:
+ *   8  espos_sk_delta_cfg_t gained no_drop (appended, sizeof) and
+ *      espos_sk_delta_flush() returns esp_err_t instead of void, for ring
+ *      backpressure -- espOS #238.
  *   7  portal_force moved from espos_wifi_sm_t into espos_wifi_sm_status_t,
  *      so that GET /api/v1/wifi/status can report it; both sizeof values
  *      changed. espos_wifi_portal_force_str() is new, which on its own would

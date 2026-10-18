@@ -133,13 +133,13 @@ void espos_sk_delta_set_no_drop(espos_sk_delta_t *d, bool no_drop)
 
 /* ------------------------------------------------------------ ring */
 
-/* Queue `msg`. Returns false when it could not be queued: under no_drop a full
- * ring refuses (the caller retries) instead of dropping the oldest message,
- * and a message larger than the whole buffer always fails. */
-static bool ring_push(espos_sk_delta_t *d, char *msg, uint32_t batch_ms, size_t stamp_at)
+/* Queue `msg`. `no_drop` refuses a full ring (frees the message and returns
+ * false) instead of evicting the oldest, so the caller can retry; a message
+ * larger than the whole buffer always fails. */
+static bool ring_push(espos_sk_delta_t *d, char *msg, uint32_t batch_ms, size_t stamp_at, bool no_drop)
 {
     size_t len = strlen(msg);
-    if (d->cfg.no_drop &&
+    if (no_drop &&
         (d->count >= d->cfg.max_msgs || (d->cfg.max_bytes && d->bytes + len > d->cfg.max_bytes))) {
         free(msg);
         return false; /* full, and dropping is not allowed */
@@ -403,10 +403,12 @@ static char *build_message(espos_sk_delta_t *d, uint8_t ctx, size_t *stamp_at)
     return m;
 }
 
-/* Close the window: build one message per context and queue it. Returns false
- * when no_drop is set and the whole window does not fit the ring, in which
- * case nothing is queued and the pending values are kept for the caller to
- * retry rather than dropping the oldest message. */
+/* Close the window: build one message per context and queue it. Under no_drop
+ * a window that could fit an empty ring but does not fit now is kept (nothing
+ * queued, returns false) so the caller retries once the ring drains. A window
+ * too large for the ring ever -- unreachable by message count with the
+ * supported config, reachable by bytes -- cannot be helped by waiting, so it
+ * is queued with the ordinary drop behaviour instead of blocking forever. */
 static bool flush_window(espos_sk_delta_t *d, uint32_t now_ms)
 {
     if (!d || d->pending_n == 0) {
@@ -440,8 +442,10 @@ static bool flush_window(espos_sk_delta_t *d, uint32_t now_ms)
             nm++;
         }
     }
-    if (d->cfg.no_drop && (d->count + nm > d->cfg.max_msgs ||
-                           (d->cfg.max_bytes && d->bytes + total > d->cfg.max_bytes))) {
+    bool fits_empty = nm <= d->cfg.max_msgs && (d->cfg.max_bytes == 0 || total <= d->cfg.max_bytes);
+    bool no_drop = d->cfg.no_drop && fits_empty;
+    if (no_drop && (d->count + nm > d->cfg.max_msgs ||
+                    (d->cfg.max_bytes && d->bytes + total > d->cfg.max_bytes))) {
         for (size_t i = 0; i < nm; i++) {
             free(msgs[i]);
         }
@@ -449,7 +453,7 @@ static bool flush_window(espos_sk_delta_t *d, uint32_t now_ms)
     }
     for (size_t i = 0; i < nm; i++) {
         d->st.built++;
-        ring_push(d, msgs[i], batch_ms, stamp_ats[i]);
+        ring_push(d, msgs[i], batch_ms, stamp_ats[i], no_drop);
     }
     d->pending_n = 0;
     d->ctx_n = 0;
@@ -603,6 +607,13 @@ uint32_t espos_sk_delta_next_due_ms(const espos_sk_delta_t *d, uint32_t now_ms, 
     if (d->pending_n > 0) {
         int32_t left = (int32_t)((d->pending_since_ms + d->cfg.batch_ms) - now_ms);
         due = left > 0 ? (uint32_t)left : 0;
+        /* no_drop keeps a window the full ring cannot take yet. Do not report
+         * it due on every tick -- retry after a bounded delay, so a retained
+         * backlog cannot spin the sender loop (and starve WiFi recovery). */
+        if (due == 0 && d->cfg.no_drop &&
+            (d->count >= d->cfg.max_msgs || (d->cfg.max_bytes && d->bytes >= d->cfg.max_bytes))) {
+            due = d->cfg.batch_ms ? d->cfg.batch_ms : 100;
+        }
     }
     if (connected && d->count > 0) {
         uint32_t gap = 1000 / d->cfg.drain_per_s;
