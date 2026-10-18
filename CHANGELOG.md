@@ -15,6 +15,19 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.23.0 (2026-10-18)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Other
+* feat(sk): backpressure instead of dropping a full ring by @night199uk in https://github.com/signalk-espOS/espOS/pull/238
+
+## New Contributors
+* @night199uk made their first contribution in https://github.com/signalk-espOS/espOS/pull/238
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.22.0...v0.23.0
+
 ## 0.22.0 (2026-10-18)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->

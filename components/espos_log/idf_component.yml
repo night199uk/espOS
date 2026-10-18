@@ -3,7 +3,7 @@
 ## espos_log component manifest: registry metadata for signalk-espos/espos_log.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.22.0"
+version: "0.23.0"
 # x-release-please-end
 description: "Log ring served over REST, so a device is debuggable without a serial cable"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_log"

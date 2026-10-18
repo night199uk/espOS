@@ -3,7 +3,7 @@
 ## espos_core component manifest: registry metadata for signalk-espos/espos_core.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.22.0"
+version: "0.23.0"
 # x-release-please-end
 description: "One-call boot: espos_start() brings log, config, HTTP, the network seam, WiFi and the optional stacks up in order"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_core"
@@ -48,27 +48,27 @@ dependencies:
   # a firmware that wants them lists them, and espos_start() picks them up.
   signalk-espos/espos_log:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_log"
   signalk-espos/espos_config:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_config"
   signalk-espos/espos_health:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_health"
   signalk-espos/espos_httpd:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_httpd"
   signalk-espos/espos_net:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_net"
   # WiFi on every chip with a radio or a co-processor; the 802.15.4-only
@@ -76,18 +76,18 @@ dependencies:
   # applies the same rule to its REQUIRES).
   signalk-espos/espos_wifi:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_wifi"
     rules:
       - if: "target not in [esp32h2, esp32h21, esp32h4]"
   signalk-espos/espos_event:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_event"
   signalk-espos/espos_time:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_time"

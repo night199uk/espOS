@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 ## espos_devices component manifest: registry metadata for signalk-espos/espos_devices.
 # x-release-please-start-version
-version: "0.22.0"
+version: "0.23.0"
 # x-release-please-end
 description: "Whole marine devices as graph nodes: tank senders, engine RPM, switches"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_devices"
@@ -40,16 +40,16 @@ dependencies:
   idf: ">=6.0.0,<6.1.0"
   signalk-espos/espos_flow:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_flow"
   signalk-espos/espos_sensors:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_sensors"
   signalk-espos/espos_sk_flow:
     # x-release-please-start-version
-    version: "^0.22.0"
+    version: "^0.23.0"
     # x-release-please-end
     override_path: "../espos_sk_flow"
