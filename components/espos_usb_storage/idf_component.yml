@@ -3,7 +3,7 @@
 ## espos_usb_storage component manifest: registry metadata for signalk-espos/espos_usb_storage.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.21.0"
+version: "0.22.0"
 # x-release-please-end
 description: "A microSD card exported over USB to a chartplotter, with espOS following the files it writes"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_usb_storage"
