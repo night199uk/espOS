@@ -263,6 +263,17 @@ esp_err_t espos_sk_publish_json_ctx_at(const char *context, const char *path, co
     return context ? publish(context, path, value_json, at_ms) : ESP_ERR_INVALID_ARG;
 }
 
+esp_err_t espos_sk_set_no_drop(bool on)
+{
+    if (!s.lock || !s.delta) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    lock();
+    espos_sk_delta_set_no_drop(s.delta, on);
+    unlock();
+    return ESP_OK;
+}
+
 esp_err_t espos_sk_declare_meta(const char *path, const char *meta_json, uint32_t period_ms)
 {
     if (!path || !*path || strlen(path) >= ESPOS_SK_PATH_MAX || !meta_json) {

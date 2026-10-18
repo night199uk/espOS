@@ -568,3 +568,117 @@ TEST_CASE("timestamps: a message requeued before the clock was set is dated on r
     free(m);
     espos_sk_delta_destroy(d);
 }
+
+/* -------------------------------------------------------- backpressure */
+
+TEST_CASE("no_drop: a full ring refuses with ESP_ERR_NO_MEM instead of dropping", "[delta]")
+{
+    espos_sk_delta_t *d = mk(2, 0, 20); /* room for 2 messages */
+    espos_sk_delta_set_no_drop(d, true);
+    for (int i = 0; i < 3; i++) {
+        char path[8], v[8];
+        snprintf(path, sizeof(path), "a.%d", i);
+        snprintf(v, sizeof(v), "%d", i);
+        TEST_ESP_OK(espos_sk_delta_publish(d, path, v, 1000 + i));
+        if (i < 2) {
+            TEST_ESP_OK(espos_sk_delta_flush(d, 2000)); /* queue the window */
+        } else {
+            TEST_ASSERT_EQUAL(ESP_ERR_NO_MEM, espos_sk_delta_flush(d, 2000)); /* full: refused */
+        }
+    }
+    espos_sk_delta_stats_t st;
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(2, st.buffered);
+    TEST_ASSERT_EQUAL(0, st.dropped); /* the oldest was NOT dropped */
+    char *m = espos_sk_delta_take(d, 3000, true);
+    TEST_ASSERT_NOT_NULL(m);
+    free(m);
+    TEST_ESP_OK(espos_sk_delta_flush(d, 3000)); /* the held window fits now */
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(0, st.dropped);
+    espos_sk_delta_destroy(d);
+}
+
+TEST_CASE("no_drop: a caller that drains and retries loses nothing", "[delta]")
+{
+    espos_sk_delta_t *d = mk(2, 0, 1000); /* 2 messages, fast drain */
+    espos_sk_delta_set_no_drop(d, true);
+    size_t got = 0;
+    for (int i = 0; i < 4; i++) {
+        char path[8], v[8];
+        snprintf(path, sizeof(path), "a.%d", i);
+        snprintf(v, sizeof(v), "%d", i);
+        TEST_ESP_OK(espos_sk_delta_publish(d, path, v, 1000 + i));
+        while (espos_sk_delta_flush(d, 2000) == ESP_ERR_NO_MEM) {
+            char *m = espos_sk_delta_take(d, 3000 + (int)got * 100, true);
+            TEST_ASSERT_NOT_NULL(m);
+            got++;
+            free(m);
+        }
+    }
+    char *m;
+    while ((m = espos_sk_delta_take(d, 9000 + (int)got * 100, true)) != NULL) {
+        got++;
+        free(m);
+    }
+    espos_sk_delta_stats_t st;
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(4, got);        /* every published message delivered once */
+    TEST_ASSERT_EQUAL(0, st.dropped); /* and none dropped */
+    espos_sk_delta_destroy(d);
+}
+
+TEST_CASE("no_drop: a publish that closes a window against a full ring is refused", "[delta]")
+{
+    espos_sk_delta_t *d = mk(2, 0, 20); /* room for 2 messages */
+    espos_sk_delta_set_no_drop(d, true);
+    for (int i = 0; i < 2; i++) { /* fill the ring */
+        char p[8], v[8];
+        snprintf(p, sizeof(p), "r.%d", i);
+        snprintf(v, sizeof(v), "%d", i);
+        TEST_ESP_OK(espos_sk_delta_publish(d, p, v, 1000 + i));
+        TEST_ESP_OK(espos_sk_delta_flush(d, 2000));
+    }
+    for (int i = 0; i < ESPOS_SK_PENDING_MAX; i++) { /* fill the window */
+        char p[8], v[8];
+        snprintf(p, sizeof(p), "q.%d", i);
+        snprintf(v, sizeof(v), "%d", i);
+        TEST_ESP_OK(espos_sk_delta_publish(d, p, v, 3000 + i));
+    }
+    espos_sk_delta_stats_t st;
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(ESPOS_SK_PENDING_MAX, st.pending);
+    TEST_ASSERT_EQUAL(2, st.buffered);
+    /* the next publish closes the full window against the full ring: refused,
+     * retained, and the new value is not appended */
+    TEST_ASSERT_EQUAL(ESP_ERR_NO_MEM, espos_sk_delta_publish(d, "q.x", "9", 4000));
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(ESPOS_SK_PENDING_MAX, st.pending);
+    TEST_ASSERT_EQUAL(2, st.buffered);
+    TEST_ASSERT_EQUAL(0, st.dropped);
+    espos_sk_delta_destroy(d);
+}
+
+TEST_CASE("no_drop: a window too large for the ring is dropped, not refused forever", "[delta]")
+{
+    espos_sk_delta_t *d = mk(8, 200, 20); /* a 200-byte ring */
+    espos_sk_delta_set_no_drop(d, true);
+    char big[202]; /* a ~200-char JSON string: its message cannot fit 200 bytes */
+    big[0] = '"';
+    memset(big + 1, 'x', 199);
+    big[200] = '"';
+    big[201] = '\0';
+    TEST_ESP_OK(espos_sk_delta_publish(d, "a.b", big, 1000));
+    /* it cannot fit the ring even empty, so it is dropped rather than kept
+     * pending forever -- the flush succeeds and clears the window */
+    TEST_ESP_OK(espos_sk_delta_flush(d, 2000));
+    espos_sk_delta_stats_t st;
+    espos_sk_delta_stats(d, &st);
+    TEST_ASSERT_EQUAL(0, st.pending);
+    TEST_ASSERT_EQUAL(0, st.buffered);
+    TEST_ASSERT_GREATER_THAN(0, st.dropped);
+    /* and the next publish is not refused */
+    TEST_ESP_OK(espos_sk_delta_publish(d, "a.b", "1", 3000));
+    TEST_ESP_OK(espos_sk_delta_flush(d, 3000));
+    espos_sk_delta_destroy(d);
+}

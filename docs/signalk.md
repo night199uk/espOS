@@ -167,6 +167,21 @@ other vessels (`onlySelf`). Nothing acknowledges a delta, and the ring drops
 its oldest messages when full, so a dated delta is no more durable than any
 other: a backlog that must arrive complete goes as an upload.
 
+**Backpressure instead of a drop.** A full ring drops its oldest message,
+which is what an offline buffer should do. A caller forwarding a backlog it
+cannot afford to lose can call `espos_sk_set_no_drop(true)` instead: a publish
+that would close the window against a full ring returns `ESP_ERR_NO_MEM` and
+queues nothing, so the caller waits for the stream task to drain and retries
+rather than losing the head of its backlog. Only a window-closing publish is
+refused -- while the window is open, publishes return `ESP_OK` and the values
+stay pending, so `ESP_OK` is not a promise the value reached the ring. A window
+too large for the ring goes out with the ordinary drop behaviour instead of
+being refused forever. Turn it off again for live values, where dropping the
+oldest is the right trade. It is backpressure, not durability: a send failure
+requeued with the ring full still drops the oldest message, and the ordering
+caveats above hold, so a replay should end before current values resume and a
+backlog that must arrive complete goes as an upload.
+
 Pipeline (`sk_delta.c`, pure C, unit-tested; `sk_ws.c` = the transport
 task):
 

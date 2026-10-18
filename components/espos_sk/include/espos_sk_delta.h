@@ -39,6 +39,7 @@ typedef struct {
     size_t max_msgs;          /* ring capacity in messages */
     size_t max_bytes;         /* ring capacity in bytes (sum of message lengths) */
     uint32_t drain_per_s;     /* max backlog messages per second while draining */
+    bool no_drop;             /* refuse with ESP_ERR_NO_MEM instead of dropping the oldest */
 } espos_sk_delta_cfg_t;
 
 typedef struct {
@@ -75,7 +76,9 @@ esp_err_t espos_sk_delta_publish_ctx(espos_sk_delta_t *d, const char *context, c
  * alternating between dated and undated values therefore closes a window at
  * every change, and a backlog replayed beside live values of the same path
  * fills the ring a message per value.
- * ESP_ERR_INVALID_ARG for an at_ms before 2000 or past the year 9999. */
+ * ESP_ERR_INVALID_ARG for an at_ms before 2000 or past the year 9999.
+ * ESP_ERR_NO_MEM when no_drop is set and the ring cannot take the window's
+ * messages: nothing is enqueued, so the caller can wait and retry. */
 esp_err_t espos_sk_delta_publish_at(espos_sk_delta_t *d, const char *context, const char *path,
                                     const char *value_json, int64_t at_ms, uint32_t now_ms);
 
@@ -84,14 +87,25 @@ esp_err_t espos_sk_delta_publish_at(espos_sk_delta_t *d, const char *context, co
 char *espos_sk_delta_take(espos_sk_delta_t *d, uint32_t now_ms, bool connected);
 /** Put a message back at the head (send failed); takes ownership. */
 void espos_sk_delta_requeue(espos_sk_delta_t *d, char *msg);
-/** Force the pending batch into a message now (e.g. before disconnect). */
-void espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms);
+/** Force the pending batch out now (e.g. before disconnect). ESP_ERR_NO_MEM
+ * when no_drop is set and the ring is full: nothing was queued and the pending
+ * values are kept. */
+esp_err_t espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms);
 /** ms until something is due (batch window / drain gap); UINT32_MAX if idle. */
 uint32_t espos_sk_delta_next_due_ms(const espos_sk_delta_t *d, uint32_t now_ms, bool connected);
 void espos_sk_delta_stats(const espos_sk_delta_t *d, espos_sk_delta_stats_t *out);
 void espos_sk_delta_set_label(espos_sk_delta_t *d, const char *label);
 /** Change batching window / drain rate on a live engine. */
 void espos_sk_delta_set_timing(espos_sk_delta_t *d, uint32_t batch_ms, uint32_t drain_per_s);
+
+/**
+ * Refuse new values with ESP_ERR_NO_MEM when the ring is full rather than
+ * dropping the oldest message, so a caller forwarding a backlog it cannot
+ * afford to lose can wait for the ring to drain and retry. Off by default:
+ * the offline ring is meant to drop its oldest and keep the newest. Turn it
+ * on around a replay and off again for live values.
+ */
+void espos_sk_delta_set_no_drop(espos_sk_delta_t *d, bool no_drop);
 
 /**
  * Give the engine a wall clock, and every message it hands out carries the

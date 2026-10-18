@@ -120,6 +120,26 @@ esp_err_t espos_sk_publish_bool_ctx_at(const char *context, const char *path, bo
 esp_err_t espos_sk_publish_json_ctx_at(const char *context, const char *path, const char *value_json, int64_t at_ms);
 
 /**
+ * Refuse new values with ESP_ERR_NO_MEM when the outbound ring is full instead
+ * of dropping its oldest message. Off by default, because the ring is the
+ * offline buffer and keeping the newest is right for live data. Turn it on
+ * while forwarding a backlog the caller cannot afford to lose -- a publish
+ * that closes the window against a full ring is then refused, so the caller
+ * paces itself instead of losing the head of the backlog -- and off again for
+ * live values.
+ *
+ * Only a publish that closes the window is refused. While the window is still
+ * open, publishes return ESP_OK and the values stay pending, then go out (or
+ * are refused together) when a later publish, the batch timer, or a flush
+ * closes it -- so ESP_OK is not a promise the value reached the ring. A window
+ * too large for the ring is sent with the ordinary drop behaviour rather than
+ * refused forever. The reliable path is still a replay that ends before
+ * current values resume, or a batch upload for a backlog that must arrive
+ * complete.
+ */
+esp_err_t espos_sk_set_no_drop(bool on);
+
+/**
  * This device's own vessel, "vessels.urn:mrn:signalk:uuid:<uuid>": for a
  * device that is a vessel of its own (a dinghy, a tender) rather than a part
  * of the boat whose server it talks to. The UUID is generated on the first
