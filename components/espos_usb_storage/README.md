@@ -3,7 +3,7 @@
 A microSD card exported over USB device mode to a chartplotter or PC, which writes to it as a normal storage card, while espOS follows the append-only files the host writes and hands new records on (for example to a Signal K server once WiFi is in range). espOS never writes to the card while it is exported. ESP32-P4 and ESP32-S3.
 
 ```sh
-idf.py add-dependency "signalk-espos/espos_usb_storage^0.21.0"  # x-release-please-version
+idf.py add-dependency "signalk-espos/espos_usb_storage^0.22.0"  # x-release-please-version
 ```
 
 Part of [espOS](https://github.com/signalk-espOS/espOS), an ESP-IDF runtime for Signal K devices. The components are released in lockstep, so one version of `espos_usb_storage` works with the same version of every other.

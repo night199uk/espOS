@@ -3,7 +3,7 @@
 microSD for espOS: a card over SDMMC or SPI, and sessions of rows on it that survive a power cut, each closed with a row count and a sha256 for the server it is delivered to.
 
 ```sh
-idf.py add-dependency "signalk-espos/espos_sdlog^0.21.0"  # x-release-please-version
+idf.py add-dependency "signalk-espos/espos_sdlog^0.22.0"  # x-release-please-version
 ```
 
 Part of [espOS](https://github.com/signalk-espOS/espOS), an ESP-IDF runtime for Signal K devices. The components are released in lockstep, so one version of `espos_sdlog` works with the same version of every other.
