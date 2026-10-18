@@ -124,11 +124,26 @@ void espos_sk_delta_set_timing(espos_sk_delta_t *d, uint32_t batch_ms, uint32_t 
     }
 }
 
+void espos_sk_delta_set_no_drop(espos_sk_delta_t *d, bool no_drop)
+{
+    if (d) {
+        d->cfg.no_drop = no_drop;
+    }
+}
+
 /* ------------------------------------------------------------ ring */
 
-static void ring_push(espos_sk_delta_t *d, char *msg, uint32_t batch_ms, size_t stamp_at)
+/* Queue `msg`. Returns false when it could not be queued: under no_drop a full
+ * ring refuses (the caller retries) instead of dropping the oldest message,
+ * and a message larger than the whole buffer always fails. */
+static bool ring_push(espos_sk_delta_t *d, char *msg, uint32_t batch_ms, size_t stamp_at)
 {
     size_t len = strlen(msg);
+    if (d->cfg.no_drop &&
+        (d->count >= d->cfg.max_msgs || (d->cfg.max_bytes && d->bytes + len > d->cfg.max_bytes))) {
+        free(msg);
+        return false; /* full, and dropping is not allowed */
+    }
     /* make room: drop oldest while over either limit */
     while (d->count > 0 && (d->count >= d->cfg.max_msgs || (d->cfg.max_bytes && d->bytes + len > d->cfg.max_bytes))) {
         char *old = d->ring[d->head].msg;
@@ -141,7 +156,7 @@ static void ring_push(espos_sk_delta_t *d, char *msg, uint32_t batch_ms, size_t 
     if (d->cfg.max_bytes && len > d->cfg.max_bytes) {
         free(msg); /* a single message larger than the whole buffer */
         d->st.dropped++;
-        return;
+        return false;
     }
     size_t slot = (d->head + d->count) % d->cfg.max_msgs;
     d->ring[slot].msg = msg;
@@ -149,6 +164,7 @@ static void ring_push(espos_sk_delta_t *d, char *msg, uint32_t batch_ms, size_t 
     d->ring[slot].stamp_at = stamp_at;
     d->count++;
     d->bytes += len;
+    return true;
 }
 
 static char *ring_pop(espos_sk_delta_t *d, uint32_t *batch_ms, size_t *stamp_at)
@@ -267,6 +283,8 @@ static bool overtakes(const espos_sk_delta_t *d, int ctx, int upd, const char *p
     return false;
 }
 
+static bool flush_window(espos_sk_delta_t *d, uint32_t now_ms);
+
 esp_err_t espos_sk_delta_publish_at(espos_sk_delta_t *d, const char *context, const char *path, const char *value_json,
                                     int64_t at_ms, uint32_t now_ms)
 {
@@ -294,7 +312,9 @@ esp_err_t espos_sk_delta_publish_at(espos_sk_delta_t *d, const char *context, co
         }
     }
     if (ctx < 0 || reorder || d->pending_n == ESPOS_SK_PENDING_MAX) {
-        espos_sk_delta_flush(d, now_ms); /* window overflow: close it early */
+        if (!flush_window(d, now_ms)) { /* window overflow: close it early */
+            return ESP_ERR_NO_MEM;      /* no_drop: ring full, keep it and retry */
+        }
         ctx = context_slot(d, context);
     }
     if (d->pending_n == 0) {
@@ -383,10 +403,14 @@ static char *build_message(espos_sk_delta_t *d, uint8_t ctx, size_t *stamp_at)
     return m;
 }
 
-void espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms)
+/* Close the window: build one message per context and queue it. Returns false
+ * when no_drop is set and the whole window does not fit the ring, in which
+ * case nothing is queued and the pending values are kept for the caller to
+ * retry rather than dropping the oldest message. */
+static bool flush_window(espos_sk_delta_t *d, uint32_t now_ms)
 {
     if (!d || d->pending_n == 0) {
-        return;
+        return true;
     }
     /* The values in this batch were published between pending_since_ms and
      * now; the batch window is at most a few hundred milliseconds wide, so the
@@ -395,6 +419,10 @@ void espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms)
      * time it was measured rather than the time it was finally sent. */
     uint32_t batch_ms = d->pending_since_ms;
     (void)now_ms;
+    char *msgs[ESPOS_SK_CONTEXTS_MAX] = {};
+    size_t stamp_ats[ESPOS_SK_CONTEXTS_MAX] = {};
+    size_t nm = 0;
+    size_t total = 0;
     for (size_t c = 0; c < d->ctx_n; c++) {
         bool used = false;
         for (size_t i = 0; i < d->pending_n && !used; i++) {
@@ -403,17 +431,36 @@ void espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms)
         if (!used) {
             continue;
         }
-        size_t stamp_at;
+        size_t stamp_at = 0;
         char *m = build_message(d, (uint8_t)c, &stamp_at);
         if (m) {
-            d->st.built++;
-            ring_push(d, m, batch_ms, stamp_at);
+            msgs[nm] = m;
+            stamp_ats[nm] = stamp_at;
+            total += strlen(m);
+            nm++;
         }
+    }
+    if (d->cfg.no_drop && (d->count + nm > d->cfg.max_msgs ||
+                           (d->cfg.max_bytes && d->bytes + total > d->cfg.max_bytes))) {
+        for (size_t i = 0; i < nm; i++) {
+            free(msgs[i]);
+        }
+        return false; /* full: keep the window, the caller retries */
+    }
+    for (size_t i = 0; i < nm; i++) {
+        d->st.built++;
+        ring_push(d, msgs[i], batch_ms, stamp_ats[i]);
     }
     d->pending_n = 0;
     d->ctx_n = 0;
     d->upd_n = 0;
     d->st.pending = 0;
+    return true;
+}
+
+esp_err_t espos_sk_delta_flush(espos_sk_delta_t *d, uint32_t now_ms)
+{
+    return flush_window(d, now_ms) ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
 static bool batch_due(const espos_sk_delta_t *d, uint32_t now_ms)
