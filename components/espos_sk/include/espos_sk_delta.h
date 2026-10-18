@@ -4,8 +4,9 @@
  *
  * Delta batcher + offline ring buffer — pure C, no OS calls, host-testable.
  *
- *   publish(path, value)  →  pending (last value per path wins)
- *   after batch_ms         →  one delta message per context {"context":"vessels.self","updates":[...]}
+ *   publish(path, value)  →  pending (last value per path and timestamp wins)
+ *   after batch_ms         →  one delta message per context {"context":"vessels.self","updates":[...]},
+ *                             an update per timestamp
  *   connected              →  message goes out (backlog drains oldest-first, rate-limited)
  *   offline                →  message enters the ring (bounded by count and bytes, oldest dropped)
  *
@@ -63,6 +64,20 @@ esp_err_t espos_sk_delta_publish(espos_sk_delta_t *d, const char *path, const ch
  * backslash or control character. */
 esp_err_t espos_sk_delta_publish_ctx(espos_sk_delta_t *d, const char *context, const char *path,
                                      const char *value_json, uint32_t now_ms);
+/** The same, dated `at_ms` (unix ms) rather than when its batch closes; 0 is
+ * the plain call. A context's values go out in one message with an update per
+ * timestamp, in the order each timestamp was first published, and a dated
+ * update is sent whatever the clock set with espos_sk_delta_set_clock().
+ * Within a window a path keeps its last value per timestamp. A value that
+ * would join an update sent ahead of an older value of its path closes the
+ * window instead, so each path's values reach the server in the order they
+ * were published; values of different paths may be reordered. A path
+ * alternating between dated and undated values therefore closes a window at
+ * every change, and a backlog replayed beside live values of the same path
+ * fills the ring a message per value.
+ * ESP_ERR_INVALID_ARG for an at_ms before 2000 or past the year 9999. */
+esp_err_t espos_sk_delta_publish_at(espos_sk_delta_t *d, const char *context, const char *path,
+                                    const char *value_json, int64_t at_ms, uint32_t now_ms);
 
 /** Sender side. Returns a malloc'ed message to transmit now, or NULL.
  * connected=false only batches into the ring. */

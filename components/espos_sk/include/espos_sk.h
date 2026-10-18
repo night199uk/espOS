@@ -98,6 +98,28 @@ esp_err_t espos_sk_publish_bool_ctx(const char *context, const char *path, bool 
 esp_err_t espos_sk_publish_json_ctx(const char *context, const char *path, const char *value_json);
 
 /**
+ * The _ctx calls with the time the value was measured, unix milliseconds, for
+ * a value that waited on the device before it could be sent: a sample held
+ * through a short dropout, a reading the sensor dated itself. 0 is the plain
+ * _ctx call. The update carries this timestamp whatever `sk.timestamps` says
+ * and whether or not the device knows the time; ESP_ERR_INVALID_ARG for one
+ * before 2000 (uptime or unix seconds by mistake) or past the year 9999. Each path's values reach the server
+ * in the order they were published; values of different paths may be
+ * reordered.
+ *
+ * Still live data, as above: the server takes the last delta it receives as
+ * the vessel's current state and every plugin receives it as it arrives, so a
+ * replay should end before current values resume, and data recorded hours
+ * ago still belongs in a batch upload. A dated delta is delivered no more
+ * reliably than any other: there is no acknowledgement, and the offline ring
+ * drops its oldest messages when full.
+ */
+esp_err_t espos_sk_publish_number_ctx_at(const char *context, const char *path, double value, int64_t at_ms);
+esp_err_t espos_sk_publish_string_ctx_at(const char *context, const char *path, const char *value, int64_t at_ms);
+esp_err_t espos_sk_publish_bool_ctx_at(const char *context, const char *path, bool value, int64_t at_ms);
+esp_err_t espos_sk_publish_json_ctx_at(const char *context, const char *path, const char *value_json, int64_t at_ms);
+
+/**
  * This device's own vessel, "vessels.urn:mrn:signalk:uuid:<uuid>": for a
  * device that is a vessel of its own (a dinghy, a tender) rather than a part
  * of the boat whose server it talks to. The UUID is generated on the first

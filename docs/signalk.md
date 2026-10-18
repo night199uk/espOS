@@ -146,6 +146,27 @@ upload instead. The offline ring below is the short version of the same
 replay, and acceptable for it: it holds a bounded outage (32 KiB by
 default), drains oldest first and ends on current values.
 
+**A time of its own.** `espos_sk_publish_number/string/bool/json_ctx_at(context,
+path, value, at_ms)` date a value with when it was measured, in unix
+milliseconds, for a sample that waited on the device: one held through a
+short dropout, or a reading the sensor timestamped itself. `at_ms` 0 is the
+plain `_ctx` call. The update carries that timestamp whether or not
+`sk.timestamps` is on or the device knows the time. A context's values in a
+window go out as one delta with an update per timestamp, in the order each
+was first published. A value that would join an update sent ahead of an
+older value of its path closes the window instead, so each path's values
+reach the server in the order they were published; values of different
+paths may be reordered. A path alternating between dated and current values
+therefore costs a message per change, which is one more reason to finish a
+replay before current values resume. A time before 2000 is refused
+(`ESP_ERR_INVALID_ARG`): it is uptime or unix seconds passed by mistake.
+The caveats above still hold. History stores may not use the timestamp
+either: signalk-questdb stamps rows with the time they arrive, on purpose,
+and signalk-to-influxdb2 does too by default (`useSKTimestamp`), and skips
+other vessels (`onlySelf`). Nothing acknowledges a delta, and the ring drops
+its oldest messages when full, so a dated delta is no more durable than any
+other: a backlog that must arrive complete goes as an upload.
+
 Pipeline (`sk_delta.c`, pure C, unit-tested; `sk_ws.c` = the transport
 task):
 
