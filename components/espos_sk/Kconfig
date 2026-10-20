@@ -188,6 +188,22 @@ menu "espOS SignalK"
             sooner than it looks, and the declaration that does not fit is
             the one silently missing its units in every dashboard.
 
+    config ESPOS_SK_PENDING_MAX
+        int "Values coalesced per batch window"
+        default 32
+        range 4 32
+        help
+            How many values one batch window may hold before it closes early
+            and sends. Each slot costs about 370 bytes in the delta engine's
+            allocation (a path, a value, a timestamp and its context), so 32
+            is roughly 12 KB of internal RAM and 8 is about 3 KB.
+
+            Lower it on a board where a TLS handshake or an OTA has to compete
+            for contiguous internal RAM. It does not lose data: a full window
+            closes into a delta and a new one starts, so a smaller cap only
+            means more, smaller messages. ESPOS_SK_PENDING_MAX in
+            espos_sk_delta.h stays the cap callers are told about.
+
     config ESPOS_SK_NOTIFICATIONS
         bool "Device-health notifications"
         default y

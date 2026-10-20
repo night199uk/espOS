@@ -7,6 +7,15 @@
 
 #include "espos_sk_delta.h"
 
+/* The table the implementation allocates. CONFIG_ESPOS_SK_PENDING_MAX tunes
+ * it; ESPOS_SK_PENDING_MAX (the public header) is what callers were told they
+ * could use. A host build without the Kconfig gets the public value. */
+#ifdef CONFIG_ESPOS_SK_PENDING_MAX
+#define PENDING_CAP CONFIG_ESPOS_SK_PENDING_MAX
+#else
+#define PENDING_CAP ESPOS_SK_PENDING_MAX
+#endif
+
 typedef struct {
     char path[ESPOS_SK_PATH_MAX];
     char value[ESPOS_SK_VALUE_MAX];
@@ -37,7 +46,7 @@ typedef struct {
 struct espos_sk_delta {
     espos_sk_delta_cfg_t cfg;
     char label[40];
-    pending_t pending[ESPOS_SK_PENDING_MAX];
+    pending_t pending[PENDING_CAP];
     size_t pending_n;
     /* The contexts the open window holds values for. A delta carries one
      * context, so each becomes its own message when the window closes; a
@@ -311,7 +320,7 @@ esp_err_t espos_sk_delta_publish_at(espos_sk_delta_t *d, const char *context, co
             }
         }
     }
-    if (ctx < 0 || reorder || d->pending_n == ESPOS_SK_PENDING_MAX) {
+    if (ctx < 0 || reorder || d->pending_n == PENDING_CAP) {
         if (!flush_window(d, now_ms)) { /* window overflow: close it early */
             return ESP_ERR_NO_MEM;      /* no_drop: ring full, keep it and retry */
         }

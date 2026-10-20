@@ -25,8 +25,12 @@
 extern "C" {
 #endif
 
-#define ESPOS_SK_PATH_MAX    96
-#define ESPOS_SK_VALUE_MAX   256
+#define ESPOS_SK_PATH_MAX  96
+#define ESPOS_SK_VALUE_MAX 256
+/* The cap on values coalesced in one batch window, and the number the API
+ * promises. CONFIG_ESPOS_SK_PENDING_MAX tunes the table the implementation
+ * actually allocates; a smaller cap only closes a full window earlier (more,
+ * smaller deltas), it never drops a value. */
 #define ESPOS_SK_PENDING_MAX 32
 /* "vessels.urn:mrn:signalk:uuid:" plus a 36-character UUID is 65. */
 #define ESPOS_SK_CONTEXT_MAX 80
