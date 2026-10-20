@@ -190,7 +190,10 @@ task):
    carrying that context's paths (a device that publishes only for
    `vessels.self` sends one message per window); a path published twice
    in a window for the same context keeps the last value. Numbers use
-   the shortest round-trip representation.
+   the shortest round-trip representation. `CONFIG_ESPOS_SK_PENDING_MAX`
+   (default 32, range 4-32) caps how many values a window holds before it
+   closes early; each slot is about 370 bytes of the delta engine's
+   allocation, so lower it on a memory-constrained board.
 2. **Ring buffer** while the stream is down (`sk.buffer_msgs` /
    `sk.buffer_kb`, default 128 messages / 32 KiB): oldest messages are
    dropped first and counted (`ws.dropped`). Windows keep closing while

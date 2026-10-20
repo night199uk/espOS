@@ -199,10 +199,12 @@ menu "espOS SignalK"
             is roughly 12 KB of internal RAM and 8 is about 3 KB.
 
             Lower it on a board where a TLS handshake or an OTA has to compete
-            for contiguous internal RAM. It does not lose data: a full window
-            closes into a delta and a new one starts, so a smaller cap only
-            means more, smaller messages. ESPOS_SK_PENDING_MAX in
-            espos_sk_delta.h stays the cap callers are told about.
+            for contiguous internal RAM. Reaching this cap does not itself
+            discard a pending value: a full window closes into a delta and a
+            new one starts, so a smaller cap only means more, smaller messages.
+            The resulting delta is still subject to the ring's configured
+            overflow behaviour. ESPOS_SK_PENDING_MAX in espos_sk_delta.h stays
+            the cap callers are told about.
 
     config ESPOS_SK_NOTIFICATIONS
         bool "Device-health notifications"

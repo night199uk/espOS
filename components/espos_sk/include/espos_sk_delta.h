@@ -29,8 +29,9 @@ extern "C" {
 #define ESPOS_SK_VALUE_MAX 256
 /* The cap on values coalesced in one batch window, and the number the API
  * promises. CONFIG_ESPOS_SK_PENDING_MAX tunes the table the implementation
- * actually allocates; a smaller cap only closes a full window earlier (more,
- * smaller deltas), it never drops a value. */
+ * actually allocates; reaching a smaller cap closes the window earlier (more,
+ * smaller deltas) but does not itself discard a pending value. The resulting
+ * delta remains subject to the ring's configured overflow behaviour. */
 #define ESPOS_SK_PENDING_MAX 32
 /* "vessels.urn:mrn:signalk:uuid:" plus a 36-character UUID is 65. */
 #define ESPOS_SK_CONTEXT_MAX 80
