@@ -15,6 +15,19 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.24.0 (2026-10-22)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Other
+* feat(sk): make the delta pending-window size configurable by @night199uk in https://github.com/signalk-espOS/espOS/pull/243
+* docs(sk): document the pending-window cap by @night199uk in https://github.com/signalk-espOS/espOS/pull/245
+* fix(sk): report the real cause when the stream connect fails by @night199uk in https://github.com/signalk-espOS/espOS/pull/246
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.23.0...v0.24.0
+
 ## 0.23.0 (2026-10-18)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
