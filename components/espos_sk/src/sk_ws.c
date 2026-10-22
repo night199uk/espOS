@@ -49,6 +49,11 @@
  * internal-RAM cost. */
 #define RX_BUF_MIN 4096
 
+/* TCP + TLS + WebSocket upgrade budget for one connect attempt. The error path
+ * compares against it to tell a timeout apart from a refused or dropped
+ * connection. */
+#define SK_WS_CONNECT_TIMEOUT_MS 8000
+
 static const char *TAG = "espos_skws";
 
 typedef struct {
@@ -582,7 +587,6 @@ static void ws_task(void *arg)
 {
     (void)arg;
     esp_transport_handle_t tcp = NULL, ws = NULL;
-    bool built_tls = false; /* which scheme the transport pair above was built for */
     bool connected = false;
     uint32_t next_health = 0;
     uint32_t down_since_ms = 0;
@@ -661,17 +665,19 @@ static void ws_task(void *arg)
                 vTaskDelay(pdMS_TO_TICKS(idle));
                 continue;
             }
-            /* connect */
-            if (ws && built_tls != srv.tls) {
-                /* The underlying transport is the whole of the ws-vs-wss
-                 * difference: esp_transport_ws sits on either, and neither can
-                 * be turned into the other. So a scheme change destroys the
-                 * pair and builds the right one -- which is what let sk.scheme
-                 * stop being restart_required, and what makes `auto` usable at
-                 * all: the scheme is now something discovery can change under
-                 * a running device. */
-                ESP_LOGI(TAG, "scheme changed to %s: rebuilding the transport", srv.tls ? "wss" : "ws");
-                esp_transport_destroy(ws); /* owns and destroys tcp with it */
+            /* connect. A transport is reused across reconnects, and
+             * esp_transport_ws keeps the previous attempt's HTTP upgrade
+             * status in it; build a fresh pair every time so the status the
+             * error path reads belongs to this attempt. It also makes the
+             * ws-vs-wss choice follow discovery after a scheme change, which
+             * is why sk.scheme is not restart_required. */
+            if (ws != NULL) {
+                /* ws_destroy() frees only the WebSocket layer; the child
+                 * TCP/TLS transport is a separate handle and must go too. */
+                esp_transport_destroy(ws);
+                if (tcp != NULL) {
+                    esp_transport_destroy(tcp);
+                }
                 ws = NULL;
                 tcp = NULL;
             }
@@ -696,7 +702,6 @@ static void ws_task(void *arg)
                 tcp = esp_transport_tcp_init();
 #endif
                 ws = esp_transport_ws_init(tcp);
-                built_tls = srv.tls;
             }
             esp_transport_ws_set_path(ws, "/signalk/v1/stream?subscribe=none&sendMeta=all");
             if (token[0]) {
@@ -723,9 +728,25 @@ static void ws_task(void *arg)
                 }
             }
 #endif
-            int rc = esp_transport_connect(ws, srv.host, srv.port, 8000);
-            int http = rc < 0 ? esp_transport_ws_get_upgrade_request_status(ws) : 101;
+            const uint32_t connect_started_ms = now_ms();
+            const int rc = esp_transport_connect(ws, srv.host, srv.port,
+                                                 SK_WS_CONNECT_TIMEOUT_MS);
+            const int64_t connect_ms =
+                (int64_t)(uint32_t)(now_ms() - connect_started_ms);
+            /* Read the transport's captured socket error before the close below
+             * clears it; the global errno may belong to another task. */
+            const int transport_errno = esp_transport_get_errno(tcp);
+            const int http =
+                rc < 0 ? esp_transport_ws_get_upgrade_request_status(ws) : 101;
 #if CONFIG_ESPOS_SK_TLS
+            /* Capture the verify callback's reason before the discard below:
+             * handshake_begin() cleared it, so an empty string here means this
+             * attempt failed before (or without) a certificate refusal. */
+            char cert_reason[96] = { 0 };
+            if (srv.tls && espos_sk_tls_last_error()[0]) {
+                snprintf(cert_reason, sizeof(cert_reason), "%s",
+                         espos_sk_tls_last_error());
+            }
             if (srv.tls) {
                 /* 101 is the only proof this device has that the other end is
                  * a SignalK server rather than something that merely finished
@@ -741,13 +762,13 @@ static void ws_task(void *arg)
 #endif
             if (rc < 0) {
                 esp_transport_close(ws);
-                char msg[96];
+                char msg[128];
 #if CONFIG_ESPOS_SK_TLS
-                if (srv.tls && http <= 0 && espos_sk_tls_last_error()[0]) {
+                if (cert_reason[0]) {
                     /* Not "connect failed": the token machine has a state for
                      * this that keeps the token and retries on a flat minute
                      * instead of an exponential backoff. */
-                    snprintf(msg, sizeof(msg), "%s", espos_sk_tls_last_error());
+                    snprintf(msg, sizeof(msg), "%s", cert_reason);
                     espos_sk_report_cert_error(msg);
                     ESP_LOGW(TAG, "%s", msg);
                     set_error(msg);
@@ -757,12 +778,37 @@ static void ws_task(void *arg)
                 }
 #endif
                 if (http == 401 || http == 403) {
-                    snprintf(msg, sizeof(msg), "stream refused (HTTP %d): token rejected", http);
+                    snprintf(msg, sizeof(msg),
+                             "stream refused (HTTP %d): token rejected", http);
                     espos_sk_report_unauthorized();
+                } else if (http == 101) {
+                    /* The upgrade response arrived (101) but the WebSocket
+                     * handshake itself did not complete: a bad accept, an
+                     * immediate close, or a proxy that answered but did not
+                     * carry the stream. */
+                    snprintf(msg, sizeof(msg),
+                             "websocket upgrade failed (HTTP 101 after %lld ms)",
+                             (long long)connect_ms);
                 } else if (http > 0) {
-                    snprintf(msg, sizeof(msg), "stream refused (HTTP %d)", http);
+                    /* An HTTP refusal is a response; it must win over the
+                     * elapsed-time timeout, which can also be reached while
+                     * the server is answering. */
+                    snprintf(msg, sizeof(msg),
+                             "stream refused (HTTP %d) after %lld ms", http,
+                             (long long)connect_ms);
+                } else if (connect_ms >= SK_WS_CONNECT_TIMEOUT_MS) {
+                    /* No HTTP response at all: TCP or TLS ran into the connect
+                     * budget. This used to be reported as the previous
+                     * attempt's stale "HTTP 101". */
+                    snprintf(msg, sizeof(msg),
+                             "connect timeout after %lld ms (no upgrade response)",
+                             (long long)connect_ms);
                 } else {
-                    snprintf(msg, sizeof(msg), "connect failed");
+                    snprintf(msg, sizeof(msg),
+                             "connect failed after %lld ms (transport errno %d: %s)",
+                             (long long)connect_ms, transport_errno,
+                             transport_errno ? strerror(transport_errno)
+                                             : "no error");
                 }
                 ESP_LOGW(TAG, "%s", msg);
                 set_error(msg);
