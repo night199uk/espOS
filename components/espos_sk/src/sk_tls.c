@@ -741,6 +741,11 @@ esp_err_t espos_sk_tls_handshake_begin(uint32_t timeout_ms)
         return ESP_ERR_NO_MEM;
     }
     (void)espos_health_report("tlsMemory", ESPOS_HEALTH_NORMAL, "");
+    /* A new handshake: a previous certificate refusal must not be read as this
+     * attempt's reason if it fails before the verify callback runs. */
+    lock();
+    s.last_error[0] = '\0';
+    unlock();
     espos_sk_tls_discard();
     return ESP_OK;
 }
