@@ -1,6 +1,6 @@
 # espos_n2k
 
-NMEA 2000 over TWAI: a candump TCP server, and an optional NMEA 2000 node (`CONFIG_ESPOS_N2K_NODE`) with address claim, instances and product information. The node's protocol layer is the vendored [NMEA2000](https://github.com/ttlappalainen/NMEA2000) library (MIT, `third_party/NMEA2000/`).
+NMEA 2000 over TWAI: a candump TCP server, and optional NMEA 2000 nodes (`CONFIG_ESPOS_N2K_NODE`) — one device (`Node`) or several logical devices on one bus (`MultiNode`) — with address claim, instances and product information. The protocol layer is the vendored [NMEA2000](https://github.com/ttlappalainen/NMEA2000) library (MIT, `third_party/NMEA2000/`).
 
 ```sh
 idf.py add-dependency "signalk-espos/espos_n2k^0.24.0"  # x-release-please-version

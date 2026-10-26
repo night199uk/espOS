@@ -22,7 +22,7 @@ set(priv_reqs lwip espressif__mdns espos_config nvs_flash esp_app_format)
 # The library's directory is public because node.h hands out tN2kMsg.
 if(CONFIG_ESPOS_N2K_NODE)
     set(n2klib third_party/NMEA2000/src)
-    list(APPEND srcs src/node.cpp
+    list(APPEND srcs src/node.cpp src/multi_node.cpp
          ${n2klib}/NMEA2000.cpp ${n2klib}/N2kMsg.cpp ${n2klib}/N2kTimer.cpp
          ${n2klib}/N2kStream.cpp ${n2klib}/N2kGroupFunction.cpp
          ${n2klib}/N2kGroupFunctionDefaultHandlers.cpp
