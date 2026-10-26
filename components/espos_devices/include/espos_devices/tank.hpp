@@ -186,9 +186,6 @@ struct TankLevelConfig {
     uint32_t capacity_period_ms = 10000;
 };
 
-namespace detail
-{
-
 // The capacity/currentVolume pair after the level has been calibrated.
 // Publishes the constant capacity on a slow cadence and volume on every
 // level; both are optional, so a level-only tank costs no node.
@@ -233,8 +230,6 @@ class TankValues : public espos::flow::NodeBase,
     uint32_t capacity_last_ms_ = 0;
     bool capacity_sent_ = false;
 };
-
-}  // namespace detail
 
 class TankLevel
 {
@@ -484,12 +479,12 @@ class TankLevel
             detail::SubId(cfg.id, 'c'), cfg.curve, cfg.curve_count);
     }
 
-    static detail::TankValues *make_values(espos::flow::Graph &g,
-                                           const TankLevelConfig &cfg,
-                                           const Paths &paths)
+    static TankValues *make_values(espos::flow::Graph &g,
+                                   const TankLevelConfig &cfg,
+                                   const Paths &paths)
     {
         if (cfg.capacity_m3 <= 0.0f) return nullptr;
-        return &g.make<detail::TankValues>(
+        return &g.make<TankValues>(
             detail::SubId(cfg.id, 'v'), paths.capacity, paths.volume,
             cfg.capacity_m3, cfg.capacity_period_ms);
     }
@@ -535,7 +530,7 @@ class TankLevel
     espos::flow::DividerR2 *divider_ = nullptr;
     espos::flow::Linear<float> *scale_ = nullptr;
     espos::flow::Curve<32> *curve_ = nullptr;
-    detail::TankValues *values_ = nullptr;
+    TankValues *values_ = nullptr;
     espos::flow::TankLevel &level_;
     espos::sk::Output<float> &out_;
     espos::flow::Producer<float> *source_ = nullptr;
