@@ -24,7 +24,7 @@ expecting ohms gives a tank that reads plausibly and is wrong all season.
 This is the shape SensESP asked for in
 [#264](https://github.com/SignalK/SensESP/issues/264) and never had.
 
-### Voltage senders and curves
+## Voltage senders and curves
 
 The config also describes voltage senders and multi-point calibration. A
 voltage sender may be read by an external ADC. Pass the producer as the third
@@ -65,8 +65,7 @@ The device also declares the metadata. `location` and `position` generate a
 display name such as `Port Forward Blackwater Tank`; `display_name` and
 `description` override it. `level_zones` supplies the currentLevel alarm-zone
 JSON, which a project can use to keep its fluid-specific thresholds. The
-`TankType` categories are Signal K's; the NMEA 2000 sender maps them to
-`tN2kFluidType` where that library is present.
+`TankType` categories are Signal K's.
 
 ## Nothing is hidden
 
@@ -86,7 +85,7 @@ fresh.level() >> my_alarm;                 // a second consumer
 
 | Device | Publishes | The part that is easy to get wrong |
 |---|---|---|
-| `TankLevel` | `tanks.<type>.<instance>.{currentLevel,capacity,currentVolume}` | resistance → ohms, or voltage → ratio; a curve is not a straight line |
+| `TankLevel` | `tanks.<type>.<instance>.{currentLevel,capacity,currentVolume}` | ADC volts → ohms → ratio, or sender volts → ratio; a curve is not a straight line |
 | `EngineRpm` | `propulsion.*.revolutions` | **revolutions per SECOND**, not RPM |
 | `EngineHours` | `propulsion.*.runTime` | seconds, and it does **not** persist on its own |
 | `SmartSwitch` | `electrical.switches.*.state` | the device must publish before the server will route a PUT to it |

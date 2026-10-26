@@ -50,6 +50,7 @@
 #include <cstdio>
 
 #include "esp_err.h"
+#include "esp_log.h"
 
 #include "espos_devices/detail.hpp"
 #include "espos_flow/graph.hpp"
@@ -62,8 +63,7 @@ namespace espos::devices
 {
 
 // The Signal K tank category. The path segment and the human-readable name
-// are derived from this; the N2K sender maps it to tN2kFluidType where the
-// NMEA2000 library is already present.
+// are derived from this.
 enum class TankType : uint8_t {
     kFreshWater,
     kWasteWater,
@@ -176,10 +176,10 @@ struct TankLevelConfig {
     const espos::formulas::CurveSample *curve = nullptr;
     std::size_t curve_count = 0;
 
-    // Optional capacity/currentVolume outputs. Both paths are Signal K
-    // specification paths, in m3; the capacity is a constant that is
-    // re-published periodically so a late dashboard still sees it. Leave a
-    // path null to disable that output; capacity_m3 <= 0 disables both.
+    // Optional capacity/currentVolume outputs. Both paths are derived from
+    // type/instance unless explicitly overridden; capacity_m3 <= 0 disables
+    // both. Capacity is re-published periodically so a late dashboard still
+    // sees it.
     const char *capacity_path = nullptr;
     const char *volume_path = nullptr;
     float capacity_m3 = 0.0f;
@@ -234,6 +234,11 @@ class TankValues : public espos::flow::NodeBase,
 class TankLevel
 {
   public:
+    TankLevel(const TankLevel &) = delete;
+    TankLevel &operator=(const TankLevel &) = delete;
+    TankLevel(TankLevel &&) = delete;
+    TankLevel &operator=(TankLevel &&) = delete;
+
     // A sender on the built-in ADC. `cfg.gpio` must be set; the resulting
     // Analog node's open error is reported by start()/open_error().
     TankLevel(espos::flow::Graph &g, const TankLevelConfig &cfg)
@@ -337,7 +342,10 @@ class TankLevel
               full_reading(cfg))),
           out_(g.make<espos::sk::Output<float>>(paths_.level))
     {
-        if (external == nullptr && analog_ == nullptr) {
+        if (!paths_.ok) {
+            config_error_ = ESP_ERR_INVALID_SIZE;
+            ESP_LOGE("tank", "%s path override is too long", cfg.id);
+        } else if (external == nullptr && analog_ == nullptr) {
             config_error_ = ESP_ERR_INVALID_ARG;
         }
         source_ = external != nullptr
@@ -351,18 +359,21 @@ class TankLevel
         char level[64];
         char capacity[64];
         char volume[64];
+        bool ok = true;
     };
 
     static void copy_path(char *out, std::size_t n, const char *override_path,
                           const char *type, uint8_t instance,
-                          const char *suffix)
+                          const char *suffix, bool &ok)
     {
+        int written;
         if (override_path != nullptr && *override_path != '\0') {
-            std::snprintf(out, n, "%s", override_path);
-            return;
+            written = std::snprintf(out, n, "%s", override_path);
+        } else {
+            written = std::snprintf(out, n, "tanks.%s.%u.%s", type,
+                                    static_cast<unsigned>(instance), suffix);
         }
-        std::snprintf(out, n, "tanks.%s.%u.%s", type,
-                      static_cast<unsigned>(instance), suffix);
+        if (written < 0 || static_cast<std::size_t>(written) >= n) ok = false;
     }
 
     static Paths make_paths(const TankLevelConfig &cfg)
@@ -370,11 +381,11 @@ class TankLevel
         const char *type = detail::tank_type_info(cfg.type).path;
         Paths paths {};
         copy_path(paths.level, sizeof(paths.level), cfg.path, type,
-                  cfg.instance, "currentLevel");
+                  cfg.instance, "currentLevel", paths.ok);
         copy_path(paths.capacity, sizeof(paths.capacity), cfg.capacity_path,
-                  type, cfg.instance, "capacity");
+                  type, cfg.instance, "capacity", paths.ok);
         copy_path(paths.volume, sizeof(paths.volume), cfg.volume_path, type,
-                  cfg.instance, "currentVolume");
+                  cfg.instance, "currentVolume", paths.ok);
         return paths;
     }
 
@@ -398,11 +409,31 @@ class TankLevel
         }
     }
 
+    static void json_escape(const char *in, char *out, std::size_t n)
+    {
+        std::size_t o = 0;
+        if (n == 0) return;
+        for (const char *p = in; p != nullptr && *p != '\0' && o + 1 < n; p++) {
+            const char c = *p;
+            if ((c == '"' || c == '\\') && o + 2 < n) {
+                out[o++] = '\\';
+                out[o++] = c;
+            } else if (static_cast<unsigned char>(c) >= 0x20) {
+                out[o++] = c;
+            }
+        }
+        out[o] = '\0';
+    }
+
     void declare_meta()
     {
+        if (config_error_ != ESP_OK) return;
+
         char display[96];
+        char display_json[192];
         char description[128];
-        char json[512];
+        char description_json[256];
+        char json[1024];
         make_display_name(cfg_, display, sizeof(display));
         if (cfg_.description != nullptr && *cfg_.description != '\0') {
             std::snprintf(description, sizeof(description), "%s",
@@ -411,34 +442,54 @@ class TankLevel
             std::snprintf(description, sizeof(description), "%s level",
                           display);
         }
+        json_escape(display, display_json, sizeof(display_json));
+        json_escape(description, description_json,
+                    sizeof(description_json));
+
+        int n;
         if (cfg_.level_zones != nullptr && *cfg_.level_zones != '\0') {
-            std::snprintf(
+            n = std::snprintf(
                 json, sizeof(json),
                 "{\"units\":\"ratio\",\"displayUnits\":{\"category\":"
                 "\"percentage\"},\"description\":\"%s\","
                 "\"displayName\":\"%s\",\"zones\":%s}",
-                description, display, cfg_.level_zones);
+                description_json, display_json, cfg_.level_zones);
         } else {
-            std::snprintf(
+            n = std::snprintf(
                 json, sizeof(json),
                 "{\"units\":\"ratio\",\"displayUnits\":{\"category\":"
                 "\"percentage\"},\"description\":\"%s\","
                 "\"displayName\":\"%s\"}",
-                description, display);
+                description_json, display_json);
+        }
+        if (n < 0 || static_cast<std::size_t>(n) >= sizeof(json)) {
+            ESP_LOGE("tank", "%s metadata is too long; not declared",
+                     paths_.level);
+            return;
         }
         espos_sk_declare_meta(paths_.level, json, cfg_.period_ms);
 
         if (values_ == nullptr) return;
-        std::snprintf(json, sizeof(json),
-                      "{\"units\":\"m3\",\"description\":\"%s "
-                      "capacity\",\"displayName\":\"%s capacity\"}",
-                      display, display);
+        n = std::snprintf(json, sizeof(json),
+                          "{\"units\":\"m3\",\"description\":\"%s "
+                          "capacity\",\"displayName\":\"%s capacity\"}",
+                          display_json, display_json);
+        if (n < 0 || static_cast<std::size_t>(n) >= sizeof(json)) {
+            ESP_LOGE("tank", "%s capacity metadata is too long; not declared",
+                     paths_.capacity);
+            return;
+        }
         espos_sk_declare_meta(paths_.capacity, json, 0);
-        std::snprintf(json, sizeof(json),
-                      "{\"units\":\"m3\",\"description\":\"Calculated "
-                      "%s remaining volume\",\"displayName\":\"%s "
-                      "volume\"}",
-                      display, display);
+        n = std::snprintf(json, sizeof(json),
+                          "{\"units\":\"m3\",\"description\":\"Calculated "
+                          "%s remaining volume\",\"displayName\":\"%s "
+                          "volume\"}",
+                          display_json, display_json);
+        if (n < 0 || static_cast<std::size_t>(n) >= sizeof(json)) {
+            ESP_LOGE("tank", "%s volume metadata is too long; not declared",
+                     paths_.volume);
+            return;
+        }
         espos_sk_declare_meta(paths_.volume, json, cfg_.period_ms);
     }
 
@@ -503,7 +554,7 @@ class TankLevel
 
     void wire()
     {
-        if (source_ == nullptr) return;
+        if (config_error_ != ESP_OK || source_ == nullptr) return;
         espos::flow::Producer<float> *p = source_;
         if (scale_ != nullptr) {
             *p >> *scale_;
