@@ -118,3 +118,44 @@ curl -s http://<server>:3000/signalk/v1/api/vessels/self/tanks/freshWater/0/curr
 Set the real capacity on the Config page (`Fresh water tank → Capacity`, in
 m³: a 150 L tank is `0.15`) and `currentVolume` follows on the next reading.
 Instruments showing litres or percent convert from the SI values themselves.
+
+## Or let `TankLevel` wire it
+
+The same resistive sender is one device class, with the ADC, divider and
+calibration wired for you:
+
+```cpp
+#include "espos_devices.hpp"
+
+espos::devices::TankLevel fresh(g, {
+    .id = "fresh", .type = espos::devices::TankType::kFreshWater,
+    .instance = 0, .location = "Starboard", .gpio = 4,
+    .empty_ohms = 190.0f, .full_ohms = 3.0f,
+});
+fresh.start();
+```
+
+For a voltage sender — one with its own divider, or a channel on an external
+ADS1115 — set `sensor = TankSensor::kVoltage` and either the two-point
+`empty_volts`/`full_volts` or a multi-point curve:
+
+```cpp
+static const espos::formulas::CurveSample kTank[] = {
+    {0.0f, 0.0f}, {1.2f, 0.0f}, {3.0f, 1.0f}, {4.0f, 1.0f},
+};
+
+espos::devices::TankLevel fresh(g, {
+    .id = "fresh", .type = espos::devices::TankType::kFreshWater,
+    .instance = 0, .location = "Starboard",
+    .sensor = espos::devices::TankSensor::kVoltage,
+    .curve = kTank, .curve_count = std::size(kTank),
+    .capacity_m3 = 0.15f,
+}, ads1115_channel);
+```
+
+`register_config()` puts the curve on the web UI instead of the two-point
+values. `type` and `instance` derive `tanks.<type>.<instance>.currentLevel`,
+`capacity` and `currentVolume`; `capacity_m3` enables the last two. The
+generated display name uses `location`/`position`, e.g.
+`Starboard Freshwater Tank`. See [Devices](../devices.md) for the full config
+and the external producer contract.
