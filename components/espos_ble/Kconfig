@@ -7,8 +7,10 @@ menu "espOS BLE gateway"
         help
             How many buffered advertisements one POST to
             /signalk/v2/api/ble/gateway/advertisements carries. Bounded so a
-            flush in a busy marina cannot build an unbounded JSON document;
-            what does not fit waits for the next ble.post_int_ms. The batch
+            flush in a busy marina cannot build an unbounded JSON document.
+            A full batch goes out as soon as it is waiting. A partial one
+            waits up to ble.post_int_ms, and so does the next POST after a
+            failed one. The batch
             scratch is a static array (about 128 bytes per slot) and the
             serialised JSON is built on the heap, so raising this costs RAM
             twice over.

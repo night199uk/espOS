@@ -53,6 +53,30 @@ bool espos_ble_advq_push(espos_ble_advq_t *q, const espos_ble_adv_t *adv);
 size_t espos_ble_advq_drain(espos_ble_advq_t *q, espos_ble_adv_t *out, size_t max);
 static inline size_t espos_ble_advq_count(const espos_ble_advq_t *q) { return q->count; }
 
+/* When the gateway POSTs.
+ *
+ * A full batch goes out as soon as it is waiting and a partial one after at
+ * most the interval. One POST per interval would cap the rate at one batch
+ * per ble.post_int_ms (40 per 2 s, 20 a second), fewer than thirty-odd
+ * devices in range send. After a failed POST only the interval counts, so a
+ * struggling server is not retried on every pass of the gateway task. */
+typedef struct {
+    int64_t next_us; /* the interval's next deadline */
+    bool held;       /* the last POST failed */
+} espos_ble_post_sched_t;
+
+/* True when a POST is due at now_us with `pending` advertisements buffered.
+ * A batch is full at batch_max, or at `capacity` when the ring holds fewer
+ * than that: a ring of 10 never reaches 40. A zeroed schedule is due at
+ * once. */
+bool espos_ble_post_due(const espos_ble_post_sched_t *s, int64_t now_us, size_t pending, size_t batch_max,
+                        size_t capacity);
+/* Records a POST that finished at now_us: the next interval deadline is
+ * interval_ms on, and a failure holds full batches back until then. The time
+ * is the end of the POST, not its start, so a POST that ran longer than the
+ * interval still leaves a full interval before the retry. */
+void espos_ble_post_done(espos_ble_post_sched_t *s, int64_t now_us, bool ok, uint32_t interval_ms);
+
 /* Parsed `gatt_subscribe` sub-descriptors. */
 #define ESPOS_BLE_UUID_MAX       40
 #define ESPOS_BLE_WRITE_DATA_MAX 64

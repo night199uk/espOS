@@ -249,12 +249,15 @@ static struct {
     char ws_headers[ESPOS_SK_TOKEN_MAX + 32];
 } *s_scratch;
 
-static void post_pending(void)
+/* Forwards up to one batch. Returns false when there was something to send
+ * and it did not go out: no server, no memory for the body, or the server
+ * failed the POST. espos_ble_post_done() then holds off for the interval. */
+static bool post_pending(void)
 {
     /* Checked here, not left to the helper: a drained batch with nowhere to
      * post would be lost, so the ring keeps buffering until a server exists. */
     espos_sk_server_t srv;
-    if (espos_sk_get_server(&srv) != ESP_OK || !srv.host[0]) return;
+    if (espos_sk_get_server(&srv) != ESP_OK || !srv.host[0]) return false;
 
     espos_ble_adv_t *batch = s_scratch->post_batch;
     size_t n = 0;
@@ -262,10 +265,10 @@ static void post_pending(void)
         n = espos_ble_advq_drain(&g.q, batch, POST_BATCH_MAX);
         xSemaphoreGive(g.lock);
     }
-    if (!n) return;
+    if (!n) return true;
 
     char *body = build_adv_body(batch, n);
-    if (!body) return;
+    if (!body) return false;
 
     /* espos_sk owns the client: scheme from the server's tls flag, the token
      * as a Bearer header (no header at all when it is empty - correct when
@@ -277,7 +280,8 @@ static void post_pending(void)
     esp_err_t err = espos_sk_http_post(ADV_PATH, body, &opts, &r);
     free(body);
 
-    if (err == ESP_OK && r.status == 200) {
+    bool ok = err == ESP_OK && r.status == 200;
+    if (ok) {
         g.adv_posted += n;
         g.post_ok++;
     } else {
@@ -289,6 +293,19 @@ static void post_pending(void)
         }
     }
     espos_sk_http_resp_free(&r);
+    return ok;
+}
+
+/* Buffered advertisements. Try-lock, like the intake path: a busy lock only
+ * moves a full batch to the next pass. */
+static size_t pending_count(void)
+{
+    size_t n = 0;
+    if (xSemaphoreTake(g.lock, 0) == pdTRUE) {
+        n = espos_ble_advq_count(&g.q);
+        xSemaphoreGive(g.lock);
+    }
+    return n;
 }
 
 /* ---------------------------------------------------------------- */
@@ -939,7 +956,8 @@ static void on_gatt_error(int h, const char *error, void *arg)
 static void gateway_task(void *arg)
 {
     (void)arg;
-    int64_t next_post = 0, next_status = 0;
+    int64_t next_status = 0;
+    espos_ble_post_sched_t post_sched = { 0 };
 
     while (g.running) {
         int64_t now = esp_timer_get_time();
@@ -949,9 +967,11 @@ static void gateway_task(void *arg)
         /* Gate on the SignalK link: without it there is nowhere to post and
          * no token worth using. Advertisements keep buffering meanwhile. */
         if (sk_up) {
-            if (now >= next_post) {
-                post_pending();
-                next_post = now + (int64_t)g.post_int * 1000;
+            /* A full batch at once, a partial one after the interval; see
+             * espos_ble_post_due(). */
+            if (espos_ble_post_due(&post_sched, now, pending_count(), POST_BATCH_MAX, g.q.cap)) {
+                bool ok = post_pending();
+                espos_ble_post_done(&post_sched, esp_timer_get_time(), ok, g.post_int);
             }
             if (g.control_ws) {
                 ws_connect();

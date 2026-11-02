@@ -89,6 +89,20 @@ bool espos_ble_advq_push(espos_ble_advq_t *q, const espos_ble_adv_t *adv)
     return evicted;
 }
 
+bool espos_ble_post_due(const espos_ble_post_sched_t *s, int64_t now_us, size_t pending, size_t batch_max,
+                        size_t capacity)
+{
+    if (now_us >= s->next_us) return true;
+    size_t full = batch_max < capacity ? batch_max : capacity;
+    return !s->held && full && pending >= full;
+}
+
+void espos_ble_post_done(espos_ble_post_sched_t *s, int64_t now_us, bool ok, uint32_t interval_ms)
+{
+    s->held = !ok;
+    s->next_us = now_us + (int64_t)interval_ms * 1000;
+}
+
 size_t espos_ble_advq_drain(espos_ble_advq_t *q, espos_ble_adv_t *out, size_t max)
 {
     if (!q || !out) return 0;

@@ -50,7 +50,7 @@
       "unit": "ms",
       "restart_required": true,
       "title": "POST interval",
-      "description": "How often buffered advertisements are forwarded to the server."
+      "description": "The longest buffered advertisements wait before they are forwarded to the server, and the wait after a failed POST. A full batch goes out at once."
     },
     {
       "name": "status_int_ms",

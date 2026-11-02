@@ -101,7 +101,7 @@ save. Note NVS caps key names at 15 characters, which is why they read
 | `enabled` | `true` | master switch |
 | `active_scan` | `false` | see the P4 warning below |
 | `scan_int_ms` / `scan_win_ms` | 320 / 160 | window ≤ interval; the ratio is the duty cycle |
-| `post_int_ms` | 2000 | how often buffered advertisements are forwarded |
+| `post_int_ms` | 2000 | the longest a partial batch waits, and the wait after a failed POST; a full batch goes out at once |
 | `status_int_ms` | 30000 | status frame cadence on the control WS |
 | `max_pend_ads` | 500 | ring buffer depth; oldest dropped when full |
 | `control_ws` | `true` | off = advertisements only, which is all beacons need |
@@ -238,8 +238,20 @@ and that example puts TLS buffers there; hardware.md says why and what to weigh.
 described in [rest-api.md](rest-api.md). Reading them:
 
 * `scan_hits` == `adv_received` — intake is keeping up.
-* `adv_dropped` rising — the radio is outrunning the POST loop. Shorten
-  `post_int_ms` or raise `max_pend_ads`. The count is exact.
+* `adv_dropped` rising — advertisements are lost before they are posted. It
+  counts both the ones the full buffer sheds and the few that arrive while
+  the buffer is locked (the Bluetooth task never waits for it), so a small
+  count can come with a healthy link. A count that keeps climbing almost
+  always means the buffer is full: advertisements arrive faster than they
+  reach the server. Check the Signal K link first (`GET /api/v1/sk/status`):
+  nothing is posted while it is down. Then `post_fail`: after a failed POST
+  the gateway waits `post_int_ms` before it tries again. While POSTs
+  succeed, the interval is not the limit, because a full batch goes out as
+  soon as it is waiting: `CONFIG_ESPOS_BLE_POST_BATCH_MAX` advertisements
+  (40 by default), or the whole buffer when `max_pend_ads` is smaller. A
+  larger `max_pend_ads` bridges a short outage but cannot make up a steady
+  shortfall. The count is exact and runs since the gateway started, so watch
+  whether it rises rather than whether it is zero.
 * `post_fail` rising with `ws_connected: false` — a server or token problem,
   not a BLE one; check `GET /api/v1/sk/status` first.
 * `scanning: false` while `enabled: true` — the controller refused to start;
@@ -248,8 +260,8 @@ described in [rest-api.md](rest-api.md). Reading them:
 ## Host tests
 
 `test/host/espos_ble_test` runs the wire-format logic on the linux target
-(hex encoders, the advertisement ring and its drop accounting, UUID parsing
-and endianness, `with_response` defaulting):
+(hex encoders, the advertisement ring and its drop accounting, when a POST
+is due, UUID parsing and endianness, `with_response` defaulting):
 
 ```sh
 cd test/host/espos_ble_test
