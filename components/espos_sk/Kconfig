@@ -171,7 +171,10 @@ menu "espOS SignalK"
             20 KB of RAM; a display that fetches one value per widget on a
             layout change would otherwise open dozens at the same moment.
             A caller over the limit waits up to its own timeout for a slot
-            and gets ESP_ERR_TIMEOUT if none frees up.
+            and gets ESP_ERR_TIMEOUT if none frees up. Raising it raises the
+            socket floor the build demands as well: CONFIG_LWIP_MAX_SOCKETS
+            must be at least 11 + this value +
+            CONFIG_ESPOS_HTTPD_SSE_MAX_CLIENTS.
 
     config ESPOS_SK_MAX_META
         int "Metadata declarations"

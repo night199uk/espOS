@@ -38,6 +38,20 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 CONFIG_HTTPD_MAX_URI_LEN=512
 CONFIG_HTTPD_ERR_RESP_NO_DELAY=y
 
+# ---- Sockets. One table serves the web server and every connection the
+# device opens itself, and IDF's 10 is less than espOS asks for: espos_httpd
+# up to 7 clients (4 + CONFIG_ESPOS_HTTPD_SSE_MAX_CLIENTS) plus 3 of its own,
+# the setup portal's DNS responder 1, the delta stream 1, espos_sk's HTTP
+# calls up to 2 (CONFIG_ESPOS_SK_HTTP_MAX_CONCURRENT), the BLE gateway's
+# control socket 1 and an OTA download 1. At 10 a browser with the web UI
+# open left nothing for the outgoing calls: a P4 BLE gateway logged
+# "Failed to create socket" on every advertisement POST for a minute after
+# boot. 16 covers all of it at the defaults; each event-stream client or
+# concurrent HTTP call a firmware adds needs one more, and the consumer lint
+# in espos_core/project_include.cmake asks for the sum.
+# A slot costs a few dozen bytes; an open connection costs the same either way.
+CONFIG_LWIP_MAX_SOCKETS=16
+
 # ---- WebSocket upgrade. tcp_transport builds the whole upgrade request in one
 # CONFIG_WS_BUFFER_SIZE buffer and refuses to dial when it does not fit. The
 # request carries the bearer token (up to ESPOS_SK_TOKEN_MAX, 1024 bytes) next

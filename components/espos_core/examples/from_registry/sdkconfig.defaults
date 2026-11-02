@@ -17,6 +17,11 @@ CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 # headers, and a request that does not fit is never sent.
 CONFIG_WS_BUFFER_SIZE=2048
 
+# One socket table serves the web server and every connection the device opens
+# itself. At IDF's 10 a browser with the web UI open leaves none for the calls
+# to the Signal K server.
+CONFIG_LWIP_MAX_SOCKETS=16
+
 # espos_ota marks an image valid only after it has run. Without rollback a bad
 # update is permanent and the device needs a USB flash.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y

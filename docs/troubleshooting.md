@@ -208,6 +208,22 @@ Three places answer most questions before you get here:
 
     [Signal K → Delta stream](signalk.md#delta-stream-m4).
 
+**`Failed to create socket` or `httpd_accept_conn: error in accept (23)` in the log**
+:   The device has run out of sockets (23 is "too many open files"). The web
+    server, the delta stream and every call to the server share one table of
+    `CONFIG_LWIP_MAX_SOCKETS`. At IDF's 10 the table runs out as soon as a
+    browser holds a few connections to the web UI, and the device's own calls
+    to the server fail until the browser lets go. espOS needs 11 +
+    `CONFIG_ESPOS_HTTPD_SSE_MAX_CLIENTS` +
+    `CONFIG_ESPOS_SK_HTTP_MAX_CONCURRENT`, which is 16 at the defaults.
+    Compare that with the value in the build's `sdkconfig`:
+
+    * below it, the firmware was built with an espOS that did not check it
+      (the build now stops and names the number): update espOS, or raise
+      the value in the firmware's `sdkconfig.defaults`;
+    * at or above it, the firmware opens connections of its own on top of
+      espOS's: raise it in the firmware's `sdkconfig.defaults`.
+
 **A PUT comes back `COMPLETED` with `statusCode 405 "PUT not supported for …"`**
 :   That is the server's real answer: no plugin on the server handles PUTs for
     that path. Install or write one on the server; the device did its part.

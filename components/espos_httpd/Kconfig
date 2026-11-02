@@ -29,7 +29,10 @@ menu "espOS HTTP server"
         help
             GET /api/v1/events keeps a socket open per client. The server's
             socket budget is 4 + this value, clamped to
-            CONFIG_LWIP_MAX_SOCKETS - 3 (raise LWIP_MAX_SOCKETS for more).
+            CONFIG_LWIP_MAX_SOCKETS - 4 (raise LWIP_MAX_SOCKETS for more).
+            The build stops when LWIP_MAX_SOCKETS is below 11 + this value +
+            CONFIG_ESPOS_SK_HTTP_MAX_CONCURRENT, which leaves the device's
+            own connections room next to the web UI's.
 
     config ESPOS_HTTPD_SSE_MAX_CONNECT_CBS
         int "Maximum event-stream connect callbacks"
