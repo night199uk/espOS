@@ -107,6 +107,26 @@ typedef void (*espos_health_sink_t)(const char *key, espos_health_state_t state,
 esp_err_t espos_health_add_sink(espos_health_sink_t sink, void *arg);
 
 /**
+ * Tell one sink the current state of every recorded condition again, NORMAL
+ * ones included, without registering anything.
+ *
+ * Sinks hear about a condition only when it changes, so a sink whose far end
+ * can lose what it was told uses this to restore it: espos_sk calls it on
+ * every stream connect, because a clear dropped from its offline buffer, or a
+ * SignalK server restart, would otherwise leave the server with a stale
+ * alert, or none, until the condition next changed. Runs the sink on the
+ * caller's task with no espos_health lock held. A condition that changes
+ * while it is being replayed is sent again, so the sink hears its newest
+ * state last.
+ *
+ * @return ESP_ERR_TIMEOUT if the table stayed locked and the replay stopped
+ *         part way, or a condition kept changing while it was replayed and
+ *         its newest state may not have been the last one sent: replay again
+ *         later. ESP_ERR_INVALID_ARG for a NULL sink.
+ */
+esp_err_t espos_health_replay(espos_health_sink_t sink, void *arg);
+
+/**
  * Remove a sink. A call already in flight on another task may still complete
  * after this returns.
  */

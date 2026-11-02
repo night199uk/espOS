@@ -46,13 +46,16 @@ espos_health_add_sink(led_sink, NULL);
 ```
 
 When you register a sink, it is told about every condition so far, so a sink
-that starts late still knows the current state. Sinks run on the task that
+that starts late still knows the current state. A sink whose far end can lose
+what it was told calls `espos_health_replay()` to tell it all again;
+`espos_sk` does that on every stream connect. Sinks run on the task that
 made the report, with no lock held. You can report from inside a sink, but
 don't block there for long.
 
 With `ESPOS_SK_NOTIFICATIONS` on, `espos_sk` registers a sink of its own. It
 publishes each condition to `notifications.espos.<label>.<key>` with `state`,
-`message` and a `visual` method, so a chartplotter shows it.
+`message` and a `visual` method, so a chartplotter shows it, and publishes
+them all again each time the stream connects.
 `espos_sk_notify()` still works and simply calls `espos_health_report()`. Use
 it only when you want the report refused while Signal K isn't running.
 

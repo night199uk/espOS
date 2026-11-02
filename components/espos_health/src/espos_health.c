@@ -186,25 +186,55 @@ esp_err_t espos_health_add_sink(espos_health_sink_t sink, void *arg)
 
     unlock();
 
-    /* Replay with the lock released — same reason as fan_out(). One condition
-     * at a time rather than a copy of the whole table: this runs on the
-     * caller's task, and a table's worth of conditions is a kilobyte of stack
-     * a small task has better uses for. The sink is registered before the
-     * replay starts, so a condition reported meanwhile can reach it twice —
-     * harmless, because a condition is a level and not an edge. Losing one
-     * would not be, which is why the registration comes first. */
+    /* The sink is registered before the replay starts, so a condition reported
+     * meanwhile can reach it twice -- harmless, because a condition is a level
+     * and not an edge. Losing one would not be, which is why the registration
+     * comes first. */
+    (void)espos_health_replay(sink, arg);
+    return ESP_OK;
+}
+
+/* Bounded so a condition flapping faster than the sink can keep up cannot hold
+ * the caller here; the caller is told and replays again later. */
+#define REPLAY_PASSES 4
+
+esp_err_t espos_health_replay(espos_health_sink_t sink, void *arg)
+{
+    if (!sink) return ESP_ERR_INVALID_ARG;
+    /* With the lock released -- same reason as fan_out(). One condition at a
+     * time rather than a copy of the whole table: this runs on the caller's
+     * task, and a table's worth of conditions is a kilobyte of stack a small
+     * task has better uses for. */
+    bool incomplete = false;
     for (size_t i = 0;; i++) {
         espos_health_condition_t c;
-        if (!lock()) break;
+        if (!lock()) return ESP_ERR_TIMEOUT;
         if (i >= s.cond_n) {
             unlock();
-            break;
+            return incomplete ? ESP_ERR_TIMEOUT : ESP_OK;
         }
         c = s.cond[i];
         unlock();
-        sink(c.key, c.state, c.message, arg);
+        /* A report that lands between the copy and the sink call fans out on
+         * its own, possibly BEFORE this stale copy reaches the sink, and the
+         * far end would keep the older state. So look again afterwards and
+         * send the newer state once more; a report after that look fans out
+         * after it, and therefore after this call. */
+        bool settled = false;
+        for (int pass = 0; pass < REPLAY_PASSES && !settled; pass++) {
+            sink(c.key, c.state, c.message, arg);
+            if (!lock()) return ESP_ERR_TIMEOUT;
+            /* Slots are never freed, only espos_health_reset() empties the table. */
+            settled = i >= s.cond_n ||
+                      (s.cond[i].state == c.state && strcmp(s.cond[i].message, c.message) == 0);
+            if (!settled) c = s.cond[i];
+            unlock();
+        }
+        if (!settled) {
+            /* Still changing under us: the newest state was not sent last. */
+            incomplete = true;
+        }
     }
-    return ESP_OK;
 }
 
 esp_err_t espos_health_remove_sink(espos_health_sink_t sink, void *arg)

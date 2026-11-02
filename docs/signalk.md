@@ -907,6 +907,16 @@ isn't running (Signal K not started, or the sink couldn't register), and
   too long is refused with `ESP_ERR_INVALID_SIZE` rather than cut short,
   because a shortened key would never match the next call. While offline,
   notifications are buffered like any other delta.
+* **Every connect restates every condition**, cleared ones included, and so
+  does a config reload while connected (a rename moves the paths). The
+  offline buffer drops its oldest deltas when it fills, and a server restart
+  forgets every notification, so without this a lost clear would leave a
+  warning on the server for good, and a warning that is still true would
+  vanish until it next changed.
+* **Nothing clears the notifications of a device that is gone.** A device
+  that is switched off for good, or renamed, which changes `<label>`, leaves
+  its last state on the server. Signal K keeps notifications in memory only,
+  so a server restart removes them.
 
 espOS raises `lowMemory` and its other conditions through `espos_health`,
 not through Signal K, so they exist on a device without Signal K too. The
