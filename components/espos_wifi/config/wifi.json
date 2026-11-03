@@ -44,6 +44,8 @@
      "title": "DHCP timeout", "description": "Associated but no IP after this long counts as a failed attempt."},
     {"name": "connect_tmo_s", "type": "int", "default": 20, "min": 5, "max": 120, "unit": "s",
      "title": "Connect timeout", "description": "Safety net if the driver never reports a result."},
+    {"name": "fresh_assoc", "type": "bool", "default": false, "title": "Fresh association at boot",
+     "description": "Drop the first WiFi association after each start once and join again, about 2 s per boot. Turn on when the device is unreachable for minutes after a power cut or crash: some access points (MikroTik RouterOS 7) keep the old connection and lose everything sent to the device until it times out."},
     {"name": "stall_s", "type": "int", "default": 1800, "min": 0, "max": 86400, "unit": "s",
      "title": "Restart after no connection",
      "description": "Restart the device once when WiFi has been trying this long without connecting, nothing else carries the network and nobody is on the setup access point. Once per outage: not again until it has connected. 0 = never; at least 300."},

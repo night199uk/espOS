@@ -145,6 +145,15 @@ Three places answer most questions before you get here:
     The full table is in [WiFi → State machine](wifi.md#state-machine). The
     device refuses a password for an open or WEP network on purpose.
 
+**Unreachable for minutes after a power cut or crash, though WiFi says connected**
+:   The device has its address, but nothing reaches it: no ping, and the
+    Signal K connection times out. The access point still holds the
+    connection from before the restart and loses everything sent to the
+    device until it times that out. Seen on MikroTik RouterOS 7, whose log
+    says `reconnecting` for the device rather than `connected`. Set
+    `wifi.fresh_assoc` to `true`.
+    [WiFi → Access points that keep a restarted station](wifi.md#access-points-that-keep-a-restarted-station).
+
 **`<hostname>.local` doesn't resolve**
 :   mDNS is off in the build (`CONFIG_ESPOS_NET_MDNS=n`), the computer has no
     mDNS (older Windows), or it is on another subnet, which mDNS doesn't

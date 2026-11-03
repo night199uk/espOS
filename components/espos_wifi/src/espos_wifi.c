@@ -56,10 +56,16 @@ static struct {
                ACT_CONNECT,
                ACT_DISCONNECT,
                ACT_PORTAL_START,
-               ACT_PORTAL_STOP } type;
+               ACT_PORTAL_STOP,
+               ACT_FRESH_RECONNECT } type;
         espos_wifi_net_t net;
+        uint32_t radio_gen; /* ACT_FRESH_RECONNECT: radio_gen when queued */
     } actions[8];
     size_t action_head, action_count;
+    /* Bumped whenever the machine queues a connect or disconnect, so a fresh
+     * reconnect can tell whether its failure still belongs to the attempt it
+     * was queued in. */
+    uint32_t radio_gen;
     char *pending_status_json;   /* latest snapshot to publish (coalesced) */
     /* The link as espos_net should hear it, decided under the lock on every
      * SM status change and delivered by the drainer outside it:
@@ -213,6 +219,7 @@ static void queue_action(int type, const espos_wifi_net_t *net)
     }
     size_t i = (s.action_head + s.action_count) % (sizeof(s.actions) / sizeof(s.actions[0]));
     s.actions[i].type = type;
+    s.actions[i].radio_gen = s.radio_gen;
     if (net) {
         s.actions[i].net = *net;
     }
@@ -223,12 +230,14 @@ static void queue_action(int type, const espos_wifi_net_t *net)
 static esp_err_t q_connect(void *ctx, const espos_wifi_net_t *net)
 {
     (void)ctx;
+    s.radio_gen++;
     queue_action(ACT_CONNECT, net);
     return ESP_OK;
 }
 static esp_err_t q_disconnect(void *ctx)
 {
     (void)ctx;
+    s.radio_gen++;
     queue_action(ACT_DISCONNECT, NULL);
     return ESP_OK;
 }
@@ -401,6 +410,7 @@ static void drain_all_locked(void)
         }
         int type = s.actions[s.action_head].type;
         espos_wifi_net_t net = s.actions[s.action_head].net;
+        uint32_t queued_gen = s.actions[s.action_head].radio_gen;
         s.action_head = (s.action_head + 1) % (sizeof(s.actions) / sizeof(s.actions[0]));
         s.action_count--;
         unlock();
@@ -438,6 +448,29 @@ static void drain_all_locked(void)
             p->portal_stop(NULL);
             espos_event_post(ESPOS_EVENT_PORTAL_DOWN, NULL, 0);
             break;
+        case ACT_FRESH_RECONNECT: {
+            /* A connect or disconnect the machine queued after this one has
+             * taken the radio over: a disabled station must not be joined
+             * again, nor its disconnect wait behind the driver call. */
+            lock();
+            bool current = s.radio_gen == queued_gen && s.sm.st.state == ESPOS_WIFI_ST_CONNECTING;
+            unlock();
+            if (!current) {
+                break;
+            }
+            if (s.drv->fresh_reconnect && s.drv->fresh_reconnect() != ESP_OK) {
+                /* Only against the attempt it was queued in: while it ran, a
+                 * timer or config change may have started a newer one, which
+                 * this failure must not send into backoff. */
+                int reason = ESPOS_WIFI_REASON_CONNECT_TIMEOUT;
+                lock();
+                if (s.radio_gen == queued_gen && s.sm.st.state == ESPOS_WIFI_ST_CONNECTING) {
+                    espos_wifi_sm_event(&s.sm, ESPOS_WIFI_EV_STA_DISCONNECTED, &reason);
+                }
+                unlock();
+            }
+            break;
+        }
         default:
             break;
         }
@@ -451,6 +484,17 @@ void espos_wifi_dispatch(espos_wifi_event_t ev, const void *arg)
     }
     lock();
     espos_wifi_sm_event(&s.sm, ev, arg);
+    unlock();
+    drain();
+}
+
+void espos_wifi_request_fresh_reconnect(void)
+{
+    if (!s.lock || !s.sm_ready) {
+        return;
+    }
+    lock();
+    queue_action(ACT_FRESH_RECONNECT, NULL);
     unlock();
     drain();
 }

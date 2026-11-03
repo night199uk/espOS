@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Dirk Wahrheit
 # SPDX-License-Identifier: Apache-2.0
 idf_build_get_property(target IDF_TARGET)
-set(srcs src/wifi_sm.c src/wifi_reason.c src/wifi_last_ap.c src/wifi_stall.c src/wifi_ps.c src/espos_wifi.c src/api_wifi.c src/coproc_update.c)
+set(srcs src/wifi_sm.c src/wifi_reason.c src/wifi_last_ap.c src/wifi_stall.c src/wifi_fresh.c src/wifi_ps.c src/espos_wifi.c src/api_wifi.c src/coproc_update.c)
 # espos_net is a public requirement: the station is one transport reporting
 # into it, and a consumer that reached espos_mdns.h through this component's
 # include path (it lived here until 0.7) still finds it there.

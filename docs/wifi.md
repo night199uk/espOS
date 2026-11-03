@@ -80,6 +80,29 @@ them, and PMF is supported. Passwords must be 8 to 63 characters. A shorter
 one isn't valid WPA, so that slot is skipped with a warning. An empty
 password means an open network.
 
+## Access points that keep a restarted station
+
+A device that restarts without saying goodbye (a power cut, a crash, a flash
+that resets the chip) leaves its access point holding the old connection.
+Most access points replace it when the device joins again. Some don't: a
+MikroTik hAP ax S on RouterOS 7.24 logs `reconnecting` instead of
+`connected`, the device gets its address and sees broadcasts, but everything
+sent to it alone is lost until the access point times the old entry out,
+minutes later. The device looks connected and reaches nothing (espOS #289).
+
+`wifi.fresh_assoc = true` works around it: after each start the device drops
+its first association once, which tells the access point to forget the old
+one, and joins again straight away on the same channel. That costs about two
+seconds per boot. The state machine only sees the second association; if that
+one fails, it counts as a failed attempt like any other. It is off by default
+because most access points don't need it.
+
+A restart the firmware asks for itself, such as after an OTA update or a
+settings change, says goodbye on its own: ESP-IDF stops WiFi in its shutdown
+handler before `esp_restart()`. The setting is for every restart that can't:
+a power cut, a crash, a reset from the flasher, and on an ESP32-P4 a restart
+by the co-processor link watchdog, whose link to the radio is already dead.
+
 ## Addressing
 
 `wifi.ip_mode` is `dhcp` (the default) or `static`. With `static`,

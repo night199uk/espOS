@@ -27,12 +27,18 @@ typedef struct {
      * device): ESPOS_WIFI_STALL_LATCHED while wifiStalled is raised or held off,
      * anything else otherwise. NULL = none. */
     uint32_t *stall_latch;
+    /* Join again after the wifi.fresh_assoc drop (port_idf.c). Run by the
+     * drainer, in order with the state machine's own connects and
+     * disconnects; an error counts as a failed attempt. NULL = none. */
+    esp_err_t (*fresh_reconnect)(void);
 } espos_wifi_driver_t;
 
 const espos_wifi_driver_t *espos_wifi_driver(void);   /* the linked port */
 
 /* Called by the port (any task); serialised internally. */
 void espos_wifi_dispatch(espos_wifi_event_t ev, const void *arg);
+/* Queue the driver's fresh_reconnect behind the radio actions already queued. */
+void espos_wifi_request_fresh_reconnect(void);
 void espos_wifi_scan_done(const espos_wifi_scan_entry_t *entries, size_t n);
 /* Effective portal SSID/PSK for the port to bring the AP up with. */
 void espos_wifi_portal_credentials(char ssid[33], char psk[65]);

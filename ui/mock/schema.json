@@ -515,6 +515,12 @@
           "maximum": 120,
           "x-espos-unit": "s"
         },
+        "fresh_assoc": {
+          "title": "Fresh association at boot",
+          "description": "Drop the first WiFi association after each start once and join again, about 2 s per boot. Turn on when the device is unreachable for minutes after a power cut or crash: some access points (MikroTik RouterOS 7) keep the old connection and lose everything sent to the device until it times out.",
+          "type": "boolean",
+          "default": false
+        },
         "portal_enabled": {
           "title": "Provisioning access point",
           "description": "Bring up the setup access point when no network is configured or nothing connects for a while.",

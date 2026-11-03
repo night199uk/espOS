@@ -88,6 +88,26 @@ defaults to `"[]"` and to the full NVS string budget of 3999 bytes — roughly
  "x": {"format": "table", "columns": ["input", "output"]}}
 ```
 
+## Built-in namespaces
+
+Each component documents its own keys, next to the behaviour they control:
+
+| Namespace | Keys documented in |
+|-----------|--------------------|
+| `wifi`    | [WiFi](wifi.md): networks, addressing, reconnect, the setup portal, power save, `fresh_assoc` (rejoin once at boot for access points that keep a restarted station) |
+| `net`     | [Network](net.md) |
+| `sk`      | [Signal K](signalk.md) |
+| `ota`     | [OTA](ota.md) |
+| `httpd`   | [Security](security.md) and [REST API](rest-api.md) |
+| `prov`    | [Provisioning](provisioning.md) |
+| `time`    | [Time](time.md) |
+| `power`   | [Power](power.md) |
+| `ble`     | [BLE](ble.md) |
+| `n2k`     | [NMEA 2000](n2k.md) |
+
+`GET /api/v1/config/schema` lists every key with its title, description,
+default and limits, and the web UI's Config page is built from it.
+
 ## Runtime API (`espos_config.h`)
 
 * `espos_config_init(NULL, NULL)` — NVS backend on `CONFIG_ESPOS_CONFIG_NVS_PARTITION`
