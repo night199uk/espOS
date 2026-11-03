@@ -79,7 +79,7 @@ clock (`espos_net_sm.h`, `src/net_sm.c`) and every row above is a case in
 | Signal | When | Runs on |
 |---|---|---|
 | `ESPOS_EVENT_NETWORK_UP` / `_DOWN` | route edges, as in the table above; `NETWORK_UP` carries `espos_event_network_t {ip, hostname}` | the default event loop task |
-| `espos_net_subscribe()` callback | every edge (not RSSI refreshes), with a copy of the status | the task of the transport that reported — for WiFi the default event loop task; no `espos_net` lock held; copy out and return, never block |
+| `espos_net_subscribe()` callback | every edge (not RSSI refreshes), with a copy of the status | the task of the transport that reported — for WiFi the `espos_wifi` task, whose queued driver calls wait while it runs; no `espos_net` lock held; copy out and return, never block |
 | `net` SSE event | every status change, RSSI refreshes included; a snapshot on connect | the reporting task, through `espos_httpd_sse_publish()` |
 | `ESPOS_EVENT_MDNS_READY` | every `NETWORK_UP` once the responder runs | the default event loop task |
 
@@ -147,10 +147,10 @@ SSID, portal, reason codes).
    whether the *default route* changed; a second link coming up while the
    first carries the route is not a network event to anyone above the seam.
 
-The station reports from `espos_wifi`'s drainer, outside its state-machine
-lock, so the events go out from inside the `IP_EVENT_STA_GOT_IP` handler and
-both `espos_wifi_get_status()` and `espos_net_get_status()` already say
-"up" when a `NETWORK_UP` handler runs. Static addressing is a WiFi setting
+The station reports from `espos_wifi`'s own task, outside its state-machine
+lock and after the machine has taken the link up, so both
+`espos_wifi_get_status()` and `espos_net_get_status()` already say "up" when
+a `NETWORK_UP` handler runs. Static addressing is a WiFi setting
 (`wifi.ip_mode` and friends, [wifi.md](wifi.md), "Addressing"): the netif
 still raises `GOT_IP` with a static address, so `espos_net` sees no
 difference.

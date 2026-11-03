@@ -399,10 +399,22 @@ interface carries the default route, its options are
   esp_netif. The host port (`port_sim.c`) scripts a fake driver, so the REST
   and SSE layer can be tested too.
 * **Driver calls are never made while the state machine is locked.** The
-  state machine queues actions, and `espos_wifi_dispatch()` runs them after
-  unlocking. On the ESP32-P4 the driver is a radio chip behind an RPC that
+  state machine queues actions, and they run after the lock is released. On the ESP32-P4 the driver is a radio chip behind an RPC that
   itself delivers events into the state machine; calling it under the lock
   deadlocked within a second of boot.
+* **Queued actions run on their own task**, `espos_wifi`, in the order the
+  state machine issued them. `espos_wifi_dispatch()` only queues and wakes
+  it. Dispatch comes from the WiFi and IP event handlers, timers and HTTP
+  handlers, and a driver call lasts as long as the radio takes to answer;
+  on the ESP32-P4 that is an RPC to the co-processor, which can stall for
+  seconds. Run on the dispatching task, it held the default event loop for
+  that long, and every other WiFi and IP event waited behind it.
+  `espos_wifi_stop()` queues the driver's shutdown behind the actions the
+  stop issued and waits up to 10 s for it; if the radio is still busy it
+  returns `ESP_ERR_TIMEOUT`, the shutdown runs when the radio answers, and
+  `espos_wifi_start()` refuses until then. The task's stack and priority are
+  `CONFIG_ESPOS_WIFI_DRAIN_TASK_STACK` (4096) and
+  `CONFIG_ESPOS_WIFI_DRAIN_TASK_PRIO` (19, one below the event loop).
 * One FreeRTOS timer handles the connect, DHCP and backoff timeouts and the
   portal deadline, whichever comes first, so there is nothing to keep in
   sync.
@@ -463,9 +475,9 @@ interface carries the default route, its options are
   saying all is well.
 
 * The state machine posts nothing itself. On every status change,
-  `espos_wifi.c` queues a report for `espos_net` and delivers it outside the
-  state machine's lock, because `espos_net_report()` takes its own lock and
-  runs subscriber callbacks. `espos_net` decides whether the default route
+  `espos_wifi.c` queues a report for `espos_net` and delivers it from the
+  `espos_wifi` task, outside the state machine's lock, because
+  `espos_net_report()` takes its own lock and runs subscriber callbacks. `espos_net` decides whether the default route
   changed and posts `NETWORK_UP` or `NETWORK_DOWN`. The port's `GOT_IP`
   handler only logs the "connected to … web UI" line.
 * Bluetooth setup is a separate optional component,

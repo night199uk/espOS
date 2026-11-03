@@ -728,6 +728,22 @@ TEST_CASE("portal client count is tracked", "[wifi_sm]")
     TEST_ASSERT_EQUAL(2, ST()->portal_clients);
 }
 
+TEST_CASE("a client count that arrives after the portal stopped is ignored", "[wifi_sm]")
+{
+    espos_wifi_cfg_t c = cfg_with(NULL, NULL);
+    reset(&c);
+    espos_wifi_sm_event(&SM, ESPOS_WIFI_EV_START, NULL);
+    TEST_ASSERT_TRUE(ST()->portal_active);
+    espos_wifi_cfg_t c2 = cfg_with("Boat", NULL);
+    espos_wifi_sm_event(&SM, ESPOS_WIFI_EV_CONFIG, &c2);
+    ev_connected("Boat");
+    ev_got_ip();
+    TEST_ASSERT_FALSE(ST()->portal_active);
+    int one = 1;
+    espos_wifi_sm_event(&SM, ESPOS_WIFI_EV_PORTAL_CLIENT, &one);
+    TEST_ASSERT_EQUAL(0, ST()->portal_clients);
+}
+
 TEST_CASE("state names", "[wifi_sm]")
 {
     TEST_ASSERT_EQUAL_STRING("connected", espos_wifi_state_str(ESPOS_WIFI_ST_CONNECTED));

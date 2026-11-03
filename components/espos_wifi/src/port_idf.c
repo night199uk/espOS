@@ -37,9 +37,11 @@ static const char *TAG = "espos_wifi";
 static esp_netif_t *s_sta_netif;
 static esp_netif_t *s_ap_netif;
 static TimerHandle_t s_timer;
-static bool s_disconnect_requested;   /* our own esp_wifi_disconnect() is in flight */
+/* Set on the espos_wifi task, read on the event loop. */
+static atomic_bool s_disconnect_requested; /* our own esp_wifi_disconnect() is in flight */
 static bool s_portal_up;
-static int s_portal_clients;
+/* Counted on the event loop, zeroed on the espos_wifi task. */
+static atomic_int s_portal_clients;
 static bool s_inited;
 static char s_ssid[33];     /* of the current association, for the GOT_IP line */
 static espos_wifi_fresh_t s_fresh; /* wifi.fresh_assoc */
@@ -213,13 +215,12 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
             /* Checked before s_disconnect_requested, which a disconnect of the
              * state machine's that never echoed can leave set: the drop's echo
              * would be swallowed as that one's and nothing would reconnect. */
-            s_disconnect_requested = false;
+            atomic_store(&s_disconnect_requested, false);
             espos_wifi_request_fresh_reconnect();
             break;
         }
-        if (s_disconnect_requested && reason == WIFI_REASON_ASSOC_LEAVE) {
+        if (reason == WIFI_REASON_ASSOC_LEAVE && atomic_exchange(&s_disconnect_requested, false)) {
             /* the echo of our own esp_wifi_disconnect(); the SM already moved on */
-            s_disconnect_requested = false;
             ESP_LOGD(TAG, "swallowing our own disconnect echo");
             break;
         }
@@ -264,16 +265,19 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
         free(recs);
         break;
     }
-    case WIFI_EVENT_AP_STACONNECTED:
-        s_portal_clients++;
-        espos_wifi_dispatch(ESPOS_WIFI_EV_PORTAL_CLIENT, &s_portal_clients);
+    case WIFI_EVENT_AP_STACONNECTED: {
+        int n = atomic_fetch_add(&s_portal_clients, 1) + 1;
+        espos_wifi_dispatch(ESPOS_WIFI_EV_PORTAL_CLIENT, &n);
         break;
-    case WIFI_EVENT_AP_STADISCONNECTED:
-        if (s_portal_clients > 0) {
-            s_portal_clients--;
+    }
+    case WIFI_EVENT_AP_STADISCONNECTED: {
+        int n = atomic_load(&s_portal_clients);
+        while (n > 0 && !atomic_compare_exchange_weak(&s_portal_clients, &n, n - 1)) {
         }
-        espos_wifi_dispatch(ESPOS_WIFI_EV_PORTAL_CLIENT, &s_portal_clients);
+        n = n > 0 ? n - 1 : 0;
+        espos_wifi_dispatch(ESPOS_WIFI_EV_PORTAL_CLIENT, &n);
         break;
+    }
     default:
         break;
     }
@@ -303,9 +307,10 @@ static void on_ip_event(void *arg, esp_event_base_t base, int32_t id, void *data
             hostname = "espos";
         }
         ESP_LOGI(TAG, "connected to \"%s\" as %s — web UI: http://%s.local", s_ssid, ip.ip, hostname);
-        /* The machine reports the new link to espos_net from its drainer,
-         * still inside this handler, so by the time NETWORK_UP is posted both
-         * espos_wifi_get_status() and espos_net_get_status() already say up. */
+        /* The machine takes the link up under its lock here; the report to
+         * espos_net follows on the espos_wifi task, and espos_net posts
+         * NETWORK_UP only after recording it, so a NETWORK_UP handler sees
+         * both espos_wifi_get_status() and espos_net_get_status() up. */
         espos_wifi_dispatch(ESPOS_WIFI_EV_GOT_IP, &ip);
     } else if (id == IP_EVENT_STA_LOST_IP) {
         ESP_LOGW(TAG, "lost ip");
@@ -389,7 +394,7 @@ static esp_err_t p_connect(void *ctx, const espos_wifi_net_t *net)
 {
     (void)ctx;
     /* NB: s_disconnect_requested is deliberately left as is: the echo of a
-     * disconnect issued just before this connect (same drain) still has to
+     * disconnect issued just before this connect (same queue) still has to
      * be swallowed when it arrives during the new attempt. */
     atomic_fetch_add(&s_sm_radio_gen, 1);
     apply_ip_mode();
@@ -453,10 +458,10 @@ static esp_err_t p_disconnect(void *ctx)
 {
     (void)ctx;
     atomic_fetch_add(&s_sm_radio_gen, 1);
-    s_disconnect_requested = true;
+    atomic_store(&s_disconnect_requested, true);
     esp_err_t err = esp_wifi_disconnect();
     if (err != ESP_OK) {
-        s_disconnect_requested = false;
+        atomic_store(&s_disconnect_requested, false);
     }
     return ESP_OK;
 }
@@ -467,6 +472,8 @@ static esp_err_t p_portal_start(void *ctx)
     if (s_portal_up) {
         return ESP_OK;
     }
+    /* Before the AP comes up: a phone may join the moment it does. */
+    atomic_store(&s_portal_clients, 0);
     char ssid[33], psk[65];
     espos_wifi_portal_credentials(ssid, psk);
     wifi_config_t ap = { 0 };
@@ -520,7 +527,6 @@ static esp_err_t p_portal_start(void *ctx)
         }
     }
 
-    s_portal_clients = 0;
     s_portal_up = true;
     espos_wifi_portal_dns_start(PORTAL_IP);
     ESP_LOGI(TAG, "portal up: join \"%s\" (%s) and open http://%s/", ssid, psk[0] ? "WPA2" : "open", PORTAL_IP);
@@ -535,7 +541,7 @@ static esp_err_t p_portal_stop(void *ctx)
     }
     espos_wifi_portal_dns_stop();
     s_portal_up = false;
-    s_portal_clients = 0;
+    atomic_store(&s_portal_clients, 0);
     esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);
     ESP_LOGI(TAG, "portal down");
     return err;

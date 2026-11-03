@@ -118,7 +118,7 @@ matters when you take a lock:
 | `espos_sk_subscribe` | the Signal K stream task | Strings are only valid during the call. Don't call anything that waits on the stream. |
 | `espos_sk_put` result | the Signal K stream task | Same as above. |
 | `espos_health_add_sink` | the task that raised the condition; when you register, the conditions so far are replayed on your task | You may raise conditions of your own. |
-| `espos_net_subscribe` | the task of the link that changed; for WiFi, the default event loop | The status is only valid during the call. |
+| `espos_net_subscribe` | the task of the link that changed; for WiFi, the `espos_wifi` task | The status is only valid during the call. |
 | `espos_time_subscribe` | whatever called `espos_time_set()`: SNTP's task, the Signal K stream task, a web request, or your own code | Don't block. |
 | `espos_httpd_register` handlers | the web server task | One task serves every request, so a slow handler stalls the web page. |
 | `espos_httpd_sse_on_connect` | the web server task | Send the new client its first update and return. |

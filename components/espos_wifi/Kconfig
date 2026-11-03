@@ -12,4 +12,27 @@ menu "espOS WiFi"
             espos_net with the seam: CONFIG_ESPOS_NET_MDNS and
             CONFIG_ESPOS_NET_MDNS_MAX_SERVICES under "espOS network".
 
+    config ESPOS_WIFI_DRAIN_TASK_STACK
+        int "Driver action task stack size (bytes)"
+        default 4096
+        range 3072 16384
+        help
+            The task that runs the state machine's driver calls (connect,
+            disconnect, the portal), reports the link to espos_net with its
+            subscriber callbacks, and publishes the status to the web UI.
+            These ran on the event, timer or HTTP task that dispatched them
+            until they moved here, so the event loop no longer waits on a
+            radio that is slow to answer.
+
+    config ESPOS_WIFI_DRAIN_TASK_PRIO
+        int "Driver action task priority"
+        default 19
+        range 1 24
+        help
+            FreeRTOS priority of the driver action task. Just below the
+            default event loop (20), which ran this work before: a connect
+            or the report that brings the network up does not wait behind
+            application tasks, and the event loop still delivers the radio's
+            answers first.
+
 endmenu

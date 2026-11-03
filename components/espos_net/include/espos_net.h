@@ -21,8 +21,8 @@
  * espos_net_short_id() never call a driver or wait on one; a status snapshot
  * must not depend on a radio answering (the hosted ESP32-P4 rule, docs/wifi.md).
  * espos_net_report() is thread-safe and is called by a transport from its own
- * task. Subscribe callbacks run on that reporting task — for WiFi the default
- * event loop task — with no espos_net lock held: copy the status out and
+ * task. Subscribe callbacks run on that reporting task — for WiFi the espos_wifi
+ * task — with no espos_net lock held: copy the status out and
  * return, never block there.
  */
 #pragma once
@@ -90,8 +90,8 @@ bool espos_net_is_up(void);
  * Called on every default-route change: up, down, or moved to another
  * interface or address (the last is reported to ESPOS_EVENT as NETWORK_DOWN
  * followed by NETWORK_UP, so the "one DOWN per UP" rule holds). Runs on the
- * task of the transport that reported the change — for WiFi the default
- * event loop task — with no espos_net lock held; `st` is valid for the call
+ * task of the transport that reported the change — for WiFi the espos_wifi
+ * task — with no espos_net lock held; `st` is valid for the call
  * only. Copy it out and return; never block. `arg` is handed back untouched.
  * Small fixed table: ESP_ERR_NO_MEM when full; the same (cb, arg) pair
  * registered twice is called once. Callable before espos_net_start().

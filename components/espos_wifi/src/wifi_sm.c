@@ -625,7 +625,10 @@ void espos_wifi_sm_event(espos_wifi_sm_t *sm, espos_wifi_event_t ev, const void 
         return;
 
     case ESPOS_WIFI_EV_PORTAL_CLIENT:
-        sm->st.portal_clients = arg ? *(const int *)arg : 0;
+        /* The port counts on the event loop while the portal is stopped
+         * elsewhere, so a late count can arrive after the stop. Nobody is on a
+         * portal that is down, and the stall check must not think otherwise. */
+        sm->st.portal_clients = sm->st.portal_active && arg ? *(const int *)arg : 0;
         notify(sm);
         return;
 
