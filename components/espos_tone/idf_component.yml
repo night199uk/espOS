@@ -3,7 +3,7 @@
 ## espos_tone component manifest: registry metadata for signalk-espos/espos_tone.
 ## The version is espOS's (version.txt) and moves with it, see docs/releasing.md.
 # x-release-please-start-version
-version: "0.26.0"
+version: "0.26.1"
 # x-release-please-end
 description: "RTTTL event tones: parser, named tone library and a hardware-free player"
 url: "https://github.com/signalk-espOS/espOS/tree/main/components/espos_tone"
