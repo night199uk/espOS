@@ -23,6 +23,8 @@ extern "C" {
  * When the list is smaller than what is advertised, which entries survive
  * depends on mDNS answer order, which is not stable — so the server the
  * device is actually paired with can silently drop out. */
+/* The compile-time cap. CONFIG_ESPOS_SK_MAX_SERVERS tunes the table the
+ * implementation actually allocates; the cap stays a literal for the ABI. */
 #define ESPOS_SK_MAX_SERVERS 12
 
 typedef struct {
@@ -210,6 +212,8 @@ esp_err_t espos_sk_declare_meta(const char *path, const char *meta_json, uint32_
  * handle > 0, or <0 (-ESP_ERR_NO_MEM style) when the table is full.
  */
 typedef void (*espos_sk_sub_cb_t)(const espos_sk_update_t *u, void *arg);
+/* The compile-time cap. CONFIG_ESPOS_SK_MAX_SUBS tunes the table the
+ * implementation actually allocates; the cap stays a literal for the ABI. */
 #define ESPOS_SK_MAX_SUBS 48
 int espos_sk_subscribe(const char *pattern, uint32_t period_ms, espos_sk_sub_cb_t cb, void *arg);
 esp_err_t espos_sk_unsubscribe(int handle);

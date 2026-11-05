@@ -253,7 +253,7 @@ esp_err_t espos_sk_http_perform(const espos_sk_http_req_t *rq, espos_sk_http_res
             esp_http_client_set_header(c, "Content-Type", "application/json");
             esp_http_client_set_post_field(c, rq->json_body, (int)strlen(rq->json_body));
         }
-        char auth[ESPOS_SK_TOKEN_MAX + 8];
+        char auth[ESPOS_SK_TOKEN_CAP + 8];
         if (rq->bearer && rq->bearer[0]) {
             snprintf(auth, sizeof(auth), "Bearer %s", rq->bearer);
             esp_http_client_set_header(c, "Authorization", auth);

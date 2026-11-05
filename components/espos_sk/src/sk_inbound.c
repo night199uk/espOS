@@ -80,7 +80,7 @@ static void unlock(void) { xSemaphoreGive(s.lock); }
 static void ensure_init(void)
 {
     if (!s.lock) {
-        s.subs = calloc(ESPOS_SK_MAX_SUBS, sizeof(sub_t));
+        s.subs = calloc(ESPOS_SK_SUBS_CAP, sizeof(sub_t));
         s.lock = xSemaphoreCreateMutex();
         s.next_handle = 1;
     }
@@ -95,7 +95,7 @@ int espos_sk_subscribe(const char *pattern, uint32_t period_ms, espos_sk_sub_cb_
     }
     ensure_init();
     lock();
-    if (!s.subs || s.n_subs >= ESPOS_SK_MAX_SUBS) {
+    if (!s.subs || s.n_subs >= ESPOS_SK_SUBS_CAP) {
         unlock();
         return -ESP_ERR_NO_MEM;
     }

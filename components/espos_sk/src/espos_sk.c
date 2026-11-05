@@ -66,7 +66,7 @@ static struct {
     espos_sk_tok_cfg_t cfg;
     action_t action;
     char action_href[ESPOS_SK_HREF_MAX];
-    char action_token[ESPOS_SK_TOKEN_MAX];
+    char action_token[ESPOS_SK_TOKEN_CAP];
     uint32_t timer_due_ms;           /* 0 = none */
     uint32_t discover_due_ms;
     bool discovery_enabled;
@@ -98,11 +98,11 @@ static struct {
 
     /* shared snapshot */
     espos_sk_tok_status_t snap;
-    char snap_token[ESPOS_SK_TOKEN_MAX];
+    char snap_token[ESPOS_SK_TOKEN_CAP];
     char client_id[40];
     char vessel_context[ESPOS_SK_CONTEXT_MAX]; /* written once in espos_sk_start(), read-only after */
-    espos_sk_discovered_t servers[ESPOS_SK_MAX_SERVERS];
-    uint32_t avoid_until_ms[ESPOS_SK_MAX_SERVERS]; /* unreachable discovered servers are skipped for a while */
+    espos_sk_discovered_t servers[ESPOS_SK_SERVERS_CAP];
+    uint32_t avoid_until_ms[ESPOS_SK_SERVERS_CAP]; /* unreachable discovered servers are skipped for a while */
     /* Discovery rounds, among those anyone answered, in which the anchored
      * address (anchor_self_fallback) was not heard; keyed by that address. */
     char anchor_unheard_host[ESPOS_SK_HOST_MAX];
@@ -661,24 +661,24 @@ static void publish_servers(void)
 static void run_discovery(void)
 {
     /* heap, not stack: two arrays of ~2 KiB each */
-    espos_sk_discovered_t *found = calloc(ESPOS_SK_MAX_SERVERS, sizeof(*found));
-    espos_sk_discovered_t *merged = calloc(ESPOS_SK_MAX_SERVERS, sizeof(*merged));
+    espos_sk_discovered_t *found = calloc(ESPOS_SK_SERVERS_CAP, sizeof(*found));
+    espos_sk_discovered_t *merged = calloc(ESPOS_SK_SERVERS_CAP, sizeof(*merged));
     if (!found || !merged) {
         free(found);
         free(merged);
         return;
     }
-    size_t n = espos_sk_discovery_run(found, ESPOS_SK_MAX_SERVERS);
+    size_t n = espos_sk_discovery_run(found, ESPOS_SK_SERVERS_CAP);
     uint32_t t = now_ms();
     lock();
     /* Merge: fresh results replace, but keep recently seen entries that
      * dropped out of one query (mDNS is lossy) for two intervals. */
-    uint32_t avoid[ESPOS_SK_MAX_SERVERS] = { 0 };
+    uint32_t avoid[ESPOS_SK_SERVERS_CAP] = { 0 };
     size_t m = 0;
     /* The server our token belongs to gets the first slot.
      *
      * Fresh results used to fill the array first, so on a network
-     * advertising ESPOS_SK_MAX_SERVERS or more the carry-over loop below
+     * advertising ESPOS_SK_SERVERS_CAP or more the carry-over loop below
      * — the whole defence against mDNS being lossy — could not run at
      * all. One missed answer then evicted the anchored server, the
      * anchor lookup in select_server() found nothing, and a perfectly
@@ -723,7 +723,7 @@ static void run_discovery(void)
             keep_reserved = true;
         }
     }
-    for (size_t i = 0; i < n && m < ESPOS_SK_MAX_SERVERS; i++) {
+    for (size_t i = 0; i < n && m < ESPOS_SK_SERVERS_CAP; i++) {
         /* Skip only what the reservation above actually took. Testing
          * m > 0 instead would drop the anchored server whenever the
          * reservation did NOT run — the empty-s.servers[] case on a
@@ -741,7 +741,7 @@ static void run_discovery(void)
         }
         m++;
     }
-    for (size_t i = 0; i < s.server_count && m < ESPOS_SK_MAX_SERVERS; i++) {
+    for (size_t i = 0; i < s.server_count && m < ESPOS_SK_SERVERS_CAP; i++) {
         bool dup = false;
         for (size_t k = 0; k < m; k++) {   /* against what we kept, including the reserved anchor */
             if (strcmp(merged[k].host, s.servers[i].host) == 0 && merged[k].port == s.servers[i].port) {
@@ -1197,7 +1197,7 @@ esp_err_t espos_sk_tls_reset_now(void) { return post_cmd(CMD_TLS_RESET, NULL); }
 
 esp_err_t espos_sk_set_token(const char *token)
 {
-    if (!token || !token[0] || strlen(token) >= ESPOS_SK_TOKEN_MAX) {
+    if (!token || !token[0] || strlen(token) >= ESPOS_SK_TOKEN_CAP) {
         return ESP_ERR_INVALID_ARG;
     }
     char *copy = strdup(token);

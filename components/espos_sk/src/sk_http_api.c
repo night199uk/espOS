@@ -45,12 +45,12 @@ static esp_err_t request(espos_sk_http_method_t method, const char *path, const 
      * ask of an application task that just wants one value. */
     char *token = NULL;
     if (!opts.no_auth) {
-        token = malloc(ESPOS_SK_TOKEN_MAX);
+        token = malloc(ESPOS_SK_TOKEN_CAP);
         if (!token) {
             r->err = ESP_ERR_NO_MEM;
             return r->err;
         }
-        if (espos_sk_get_token(token, ESPOS_SK_TOKEN_MAX) != ESP_OK) {
+        if (espos_sk_get_token(token, ESPOS_SK_TOKEN_CAP) != ESP_OK) {
             token[0] = '\0';
         }
     }

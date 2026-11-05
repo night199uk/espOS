@@ -129,6 +129,25 @@ esp_err_t espos_sk_tls_reset_now(void);
 #define ESPOS_SK_META_CAP ESPOS_SK_MAX_META
 #endif
 
+/* The subscription, server and token tables the implementation allocates.
+ * The public caps in espos_sk.h / espos_sk_token_sm.h stay literals for
+ * callers and the ABI; these tune what the device actually reserves. */
+#ifdef CONFIG_ESPOS_SK_MAX_SUBS
+#define ESPOS_SK_SUBS_CAP CONFIG_ESPOS_SK_MAX_SUBS
+#else
+#define ESPOS_SK_SUBS_CAP ESPOS_SK_MAX_SUBS
+#endif
+#ifdef CONFIG_ESPOS_SK_MAX_SERVERS
+#define ESPOS_SK_SERVERS_CAP CONFIG_ESPOS_SK_MAX_SERVERS
+#else
+#define ESPOS_SK_SERVERS_CAP ESPOS_SK_MAX_SERVERS
+#endif
+#ifdef CONFIG_ESPOS_SK_TOKEN_MAX
+#define ESPOS_SK_TOKEN_CAP CONFIG_ESPOS_SK_TOKEN_MAX
+#else
+#define ESPOS_SK_TOKEN_CAP ESPOS_SK_TOKEN_MAX
+#endif
+
 esp_err_t espos_sk_ws_start(void);
 void espos_sk_ws_stop(void);
 void espos_sk_ws_config_changed(void);

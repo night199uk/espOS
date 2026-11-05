@@ -47,7 +47,7 @@
 #endif
 
 /* tcp_transport builds the whole upgrade request, bearer token of up to
- * ESPOS_SK_TOKEN_MAX included, in this buffer and refuses to dial when it does
+ * ESPOS_SK_TOKEN_CAP included, in this buffer and refuses to dial when it does
  * not fit. espos_core's lint says the same for a full espOS build; this covers
  * a project that takes espos_sk from the registry without it. */
 #if !CONFIG_IDF_TARGET_LINUX && defined(CONFIG_WS_BUFFER_SIZE) && CONFIG_WS_BUFFER_SIZE < 2048
@@ -321,7 +321,7 @@ void espos_sk_ws_meta_round(void)
         return;
     }
     espos_sk_server_t srv = { 0 };
-    char token[ESPOS_SK_TOKEN_MAX] = { 0 };
+    char token[ESPOS_SK_TOKEN_CAP] = { 0 };
     /* The stream may still count as connected for a moment after the server
      * went: count that as a failed round, or the caller would spin on it. */
     espos_sk_meta_step_t stop = ESPOS_SK_META_DONE;
@@ -708,9 +708,9 @@ static void ws_task(void *arg)
     uint32_t down_since_ms = 0;
     size_t cap = RX_BUF_MIN;
     char *buf = malloc(cap);
-    char headers[ESPOS_SK_TOKEN_MAX + 32];
+    char headers[ESPOS_SK_TOKEN_CAP + 32];
     espos_sk_server_t cur_srv = { 0 };
-    char cur_token[ESPOS_SK_TOKEN_MAX] = { 0 };
+    char cur_token[ESPOS_SK_TOKEN_CAP] = { 0 };
 
     /* The loop never blocks longer than the 8 s connect timeout, so a 20 s
      * budget separates "slow network" from "wedged task" without false
@@ -733,7 +733,7 @@ static void ws_task(void *arg)
         }
         /* preconditions: enabled, network up, server + token */
         espos_sk_server_t srv;
-        char token[ESPOS_SK_TOKEN_MAX];
+        char token[ESPOS_SK_TOKEN_CAP];
         bool net_up = espos_net_is_up();
         /* token "" is fine when the server runs without security (OPEN); the
          * token machine only exposes a server once it is usable */
