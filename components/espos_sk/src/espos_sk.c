@@ -663,15 +663,19 @@ static void publish_servers(void)
 
 static void run_discovery(void)
 {
-    /* heap, not stack: two arrays of ~2 KiB each */
-    espos_sk_discovered_t *found = calloc(ESPOS_SK_SERVERS_CAP, sizeof(*found));
+    /* Heap, not stack. found[] takes every answer up to the public cap, not
+     * the configured table: browse() fills it plaintext first, so a smaller
+     * buffer would cut off the _signalk-https pass, and with it a paired TLS
+     * server, before the anchor reservation below could see it. It lives
+     * only for this round. */
+    espos_sk_discovered_t *found = calloc(ESPOS_SK_MAX_SERVERS, sizeof(*found));
     espos_sk_discovered_t *merged = calloc(ESPOS_SK_SERVERS_CAP, sizeof(*merged));
     if (!found || !merged) {
         free(found);
         free(merged);
         return;
     }
-    size_t n = espos_sk_discovery_run(found, ESPOS_SK_SERVERS_CAP);
+    size_t n = espos_sk_discovery_run(found, ESPOS_SK_MAX_SERVERS);
     uint32_t t = now_ms();
     lock();
     /* Merge: fresh results replace, but keep recently seen entries that
@@ -722,6 +726,26 @@ static void run_discovery(void)
             snprintf(keep_host, sizeof(keep_host), "%s", merged[m].host);
             keep_port = merged[m].port;
             avoid[m] = s.avoid_until_ms[keep];
+            m++;
+            keep_reserved = true;
+        }
+    }
+    if (!keep_reserved && n > 0) {
+        /* Not in the table (a fresh boot with a restored token) but answering
+         * now: reserve it from this round. A table configured smaller than
+         * the answers would otherwise fill up before reaching it. */
+        int k = espos_sk_find_anchored(found, n, &anchor, s.have_server ? s.server.host : "",
+                                       s.have_server ? s.server.port : 0, anchor_self_fallback(&anchor));
+        if (k >= 0) {
+            merged[m] = found[k];
+            merged[m].seen_ms = t;
+            for (size_t i = 0; i < s.server_count; i++) {
+                if (espos_sk_same_addr(&s.servers[i], found[k].host, found[k].port)) {
+                    avoid[m] = s.avoid_until_ms[i];
+                }
+            }
+            snprintf(keep_host, sizeof(keep_host), "%s", found[k].host);
+            keep_port = found[k].port;
             m++;
             keep_reserved = true;
         }
