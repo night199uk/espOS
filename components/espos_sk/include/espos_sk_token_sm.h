@@ -40,12 +40,12 @@
 extern "C" {
 #endif
 
-#define ESPOS_SK_HOST_MAX  64
-#define ESPOS_SK_SELF_MAX  128
-#define ESPOS_SK_HREF_MAX  128
 /* The compile-time cap for callers' buffers. The internal copies are sized by
  * CONFIG_ESPOS_SK_TOKEN_MAX; this stays a literal for the ABI. */
 #define ESPOS_SK_TOKEN_MAX 1024
+#define ESPOS_SK_HOST_MAX  64
+#define ESPOS_SK_SELF_MAX  128
+#define ESPOS_SK_HREF_MAX  128
 #define ESPOS_SK_MSG_MAX   96
 
 typedef enum {
