@@ -209,9 +209,9 @@ menu "espOS SignalK"
             How many discovered SignalK servers are kept for selection. Each
             entry costs ~320 bytes of static RAM. ESPOS_SK_MAX_SERVERS in
             espos_sk.h stays the cap callers are told about; lowering this
-            leaves extra discovered servers off the list. A discovery round
-            still takes up to 12 answers on the heap for that round, and the
-            server the token belongs to is kept first.
+            leaves extra discovered servers off the list, but not the
+            server the token belongs to, chosen by the same rule as the
+            server selection.
 
     config ESPOS_SK_TOKEN_MAX
         int "Internal access-token capacity (bytes)"

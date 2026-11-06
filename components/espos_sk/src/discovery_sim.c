@@ -21,7 +21,7 @@ esp_err_t espos_sk_discovery_init(const char *hostname)
     return ESP_OK;
 }
 
-size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max)
+size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max, const espos_sk_keep_t *keep)
 {
     const char *env = getenv("ESPOS_SIM_SK_SERVERS");
     if (!env || !*env) {
@@ -33,8 +33,11 @@ size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max)
     }
     size_t n = 0;
     char *save = NULL;
-    for (char *tok = strtok_r(copy, ";", &save); tok && n < max; tok = strtok_r(NULL, ";", &save)) {
-        espos_sk_discovered_t *d = &out[n];
+    /* Every entry, through the same rule as real discovery: the anchored
+     * server gets in on a full list. */
+    for (char *tok = strtok_r(copy, ";", &save); tok; tok = strtok_r(NULL, ";", &save)) {
+        espos_sk_discovered_t entry;
+        espos_sk_discovered_t *d = &entry;
         memset(d, 0, sizeof(*d));
         char *f = tok;
         char *host = strsep(&f, ",");
@@ -55,7 +58,7 @@ size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max)
         snprintf(d->roles, sizeof(d->roles), "master, main");
         snprintf(d->swname, sizeof(d->swname), "signalk-server");
         snprintf(d->swvers, sizeof(d->swvers), "sim");
-        n++;
+        espos_sk_disc_add(out, &n, max, d, keep);
     }
     free(copy);
     return n;

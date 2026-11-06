@@ -776,10 +776,13 @@ code written against them still compiles, and the defaults change nothing.
   `-ESP_ERR_NO_MEM`, as one beyond 48 always did.
 * **`CONFIG_ESPOS_SK_MAX_SERVERS`** (12 by default, 1 to 12): how many
   discovered servers stay on the list, about 320 bytes of static RAM each.
-  Extra servers are left off it. A discovery round still takes up to 12
-  answers into a buffer that lives on the heap for that round only, and the
-  server the token belongs to is kept first, so a small list never loses the
-  paired server to the others, whether it speaks http or https.
+  Extra servers are left off it, but not the server the token belongs to:
+  a discovery round reads every answer, and on a full list the paired server
+  still gets in, picked by the same rule as the server choice (its address,
+  or its self URN once it has moved), then takes the first slot when the
+  list is merged. So a small list, or a crowded network, does not cost the
+  device its server, whether it speaks http or https (the plaintext answers
+  come first).
 * **`CONFIG_ESPOS_SK_TOKEN_MAX`** (1024 by default, 128 to 1024): the bytes of
   the working copies of the access token: the verify bearer and the shared
   snapshot in the device state, the copies on the stream task's stack, and

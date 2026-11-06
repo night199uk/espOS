@@ -82,7 +82,7 @@ static const char *txt_get(const mdns_result_t *r, const char *key)
 
 /* One browse of one service type, appending to out[] from index `n`. */
 static size_t browse(const char *service, bool tls, espos_sk_discovered_t *out, size_t n, size_t max,
-                     uint32_t my_ip, uint32_t my_mask)
+                     const espos_sk_keep_t *keep, uint32_t my_ip, uint32_t my_mask)
 {
     mdns_result_t *results = NULL;
     esp_err_t err = mdns_query_ptr(service, "_tcp", 3000, 20, &results);
@@ -90,8 +90,11 @@ static size_t browse(const char *service, bool tls, espos_sk_discovered_t *out, 
         ESP_LOGW(TAG, "mdns query %s: %s", service, esp_err_to_name(err));
         return n;
     }
-    for (mdns_result_t *r = results; r && n < max; r = r->next) {
-        espos_sk_discovered_t *d = &out[n];
+    /* Every answer is read, even with the list full: the anchored server may
+     * be among the last (espos_sk_disc_add). */
+    for (mdns_result_t *r = results; r; r = r->next) {
+        espos_sk_discovered_t entry;
+        espos_sk_discovered_t *d = &entry;
         memset(d, 0, sizeof(*d));
         d->tls = tls;
         /* Dual-homed servers advertise several A records; prefer the one on
@@ -128,23 +131,13 @@ static size_t browse(const char *service, bool tls, espos_sk_discovered_t *out, 
          * record outlives a config change) is listed once, at the scheme it
          * most recently claimed -- and https comes second here, so the TLS
          * answer wins. Duplicates confuse the election, not the scheme. */
-        bool dup = false;
-        for (size_t i = 0; i < n; i++) {
-            if (strcmp(out[i].host, d->host) == 0 && out[i].port == d->port) {
-                out[i] = *d;
-                dup = true;
-                break;
-            }
-        }
-        if (!dup) {
-            n++;
-        }
+        espos_sk_disc_add(out, &n, max, d, keep);
     }
     mdns_query_results_free(results);
     return n;
 }
 
-size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max)
+size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max, const espos_sk_keep_t *keep)
 {
     if (!wait_ready()) {
         return 0;
@@ -156,8 +149,8 @@ size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max)
      * _signalk-http._tcp (src/interfaces/rest.js). A device that only browsed
      * the plaintext type could not see a TLS-only server at all -- which is
      * precisely the server this whole feature exists for. */
-    size_t n = browse("_signalk-http", false, out, 0, max, my_ip, my_mask);
-    n = browse("_signalk-https", true, out, n, max, my_ip, my_mask);
+    size_t n = browse("_signalk-http", false, out, 0, max, keep, my_ip, my_mask);
+    n = browse("_signalk-https", true, out, n, max, keep, my_ip, my_mask);
     return n;
 }
 
@@ -172,10 +165,11 @@ esp_err_t espos_sk_discovery_init(const char *hostname)
     return ESP_OK;
 }
 
-size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max)
+size_t espos_sk_discovery_run(espos_sk_discovered_t *out, size_t max, const espos_sk_keep_t *keep)
 {
     (void)out;
     (void)max;
+    (void)keep;
     return 0;
 }
 
