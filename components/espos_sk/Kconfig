@@ -209,7 +209,9 @@ menu "espOS SignalK"
             How many discovered SignalK servers are kept for selection. Each
             entry costs ~320 bytes of static RAM. ESPOS_SK_MAX_SERVERS in
             espos_sk.h stays the cap callers are told about; lowering this
-            ignores extra discovered servers.
+            leaves extra discovered servers off the list. A discovery round
+            still takes up to 12 answers on the heap for that round, and the
+            server the token belongs to is kept first.
 
     config ESPOS_SK_TOKEN_MAX
         int "Internal access-token capacity (bytes)"
@@ -219,8 +221,11 @@ menu "espOS SignalK"
             Capacity of the internal copies of the SignalK access token. A
             signalk JWT is a few hundred bytes. ESPOS_SK_TOKEN_MAX in
             espos_sk_token_sm.h stays the size callers' buffers are told
-            about; lowering this shrinks the copies kept in the device state
-            and on the stream task stack.
+            about; lowering this shrinks the working copies in the device
+            state, on the stream task stack and in each HTTP request. The
+            persistent store keeps the full size. A longer token is never
+            clipped: an approved one stops in DENIED, a stored one is dropped
+            and access requested again.
 
     config ESPOS_SK_PENDING_MAX
         int "Values coalesced per batch window"

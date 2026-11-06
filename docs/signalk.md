@@ -23,7 +23,8 @@ The page follows that order. If you only want to publish a value, read
 
 Every `sk.discover_s` (60 s by default, and at once when the network comes
 up), the device looks for `_signalk-http._tcp` and `_signalk-https._tcp`
-over mDNS. It remembers up to 12 servers (`ESPOS_SK_MAX_SERVERS`) with their
+over mDNS. It remembers up to 12 servers (`ESPOS_SK_MAX_SERVERS`, fewer with
+`CONFIG_ESPOS_SK_MAX_SERVERS`, see [Table sizes](#table-sizes)) with their
 TXT records (`self`, `roles`, `swname`, `swvers`). mDNS loses answers now and
 then, so a server stays on the list for two intervals plus 5 s after it last
 answered, which covers two missed rounds.
@@ -281,7 +282,8 @@ espos_sk_send_raw("{\"context\":\"vessels.self\",\"updates\":[…]}");
 ```
 
 * **Subscriptions** are exact paths or families (`prefix.*`, `prefix*`, `*`),
-  up to 48 (`ESPOS_SK_MAX_SUBS`). The stream opens with
+  up to 48 (`ESPOS_SK_MAX_SUBS`, fewer with `CONFIG_ESPOS_SK_MAX_SUBS`, see
+  [Table sizes](#table-sizes)). The stream opens with
   `subscribe=none&sendMeta=all`. After the hello, and after every reconnect,
   one frame carries all subscriptions:
   `{"context":"vessels.self","subscribe":[{"path","period","format":"delta","policy":"instant","minPeriod"}]}`.
@@ -761,6 +763,38 @@ advertises `_signalk-https._tcp`.
    put that CA in `sk.ca_pem`. Re-issuing the certificate for the same names
    should interrupt nothing; re-issuing it for a different name should give
    `cert_error` with "names different hosts".
+
+## Table sizes
+
+Three tables are sized for a general device. A small app can shrink them; the
+public caps in `espos_sk.h` and `espos_sk_token_sm.h` stay what they are, so
+code written against them still compiles, and the defaults change nothing.
+
+* **`CONFIG_ESPOS_SK_MAX_SUBS`** (48 by default, 1 to 48): how many
+  `espos_sk_subscribe()` handles the device holds. Each takes about 112 bytes
+  of heap, all allocated at start. A subscribe call beyond it returns
+  `-ESP_ERR_NO_MEM`, as one beyond 48 always did.
+* **`CONFIG_ESPOS_SK_MAX_SERVERS`** (12 by default, 1 to 12): how many
+  discovered servers stay on the list, about 320 bytes of static RAM each.
+  Extra servers are left off it. A discovery round still takes up to 12
+  answers into a buffer that lives on the heap for that round only, and the
+  server the token belongs to is kept first, so a small list never loses the
+  paired server to the others, whether it speaks http or https.
+* **`CONFIG_ESPOS_SK_TOKEN_MAX`** (1024 by default, 128 to 1024): the bytes of
+  the working copies of the access token: the verify bearer and the shared
+  snapshot in the device state, the copies on the stream task's stack, and
+  the per-request ones of the HTTP client. The persistent store and the
+  buffer an access-request reply is parsed into stay at the public
+  `ESPOS_SK_TOKEN_MAX`, so they save nothing. A stream task stack lowered
+  with `CONFIG_ESPOS_SK_WS_TASK_STACK` turns its share into RAM. A signalk-server JWT is a few hundred bytes. A token that does not
+  fit is never clipped: an approved one leaves the machine in `DENIED` with
+  "token longer than CONFIG_ESPOS_SK_TOKEN_MAX allows" (raise it, then retry),
+  a stored one from a build with a larger value is dropped and saved dropped
+  at start, so access is requested once, and `espos_sk_set_token()` refuses
+  it with `ESP_ERR_INVALID_ARG`.
+
+`test/host/espos_sk_caps_test` builds the token machine with a reduced
+`CONFIG_ESPOS_SK_TOKEN_MAX`.
 
 ## Task stacks
 
