@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "espos_sk_token_sm.h"
+#include "espos_sk_priv.h" /* ESPOS_SK_TOKEN_CAP: what every later copy of the token holds */
 
 #define POLL_MIN_MS 5000u
 #define POLL_MAX_MS 60000u
@@ -97,6 +98,13 @@ static void clear_token(espos_sk_tok_sm_t *sm)
     sm->store.token_self[0] = '\0';
     sm->store.token_host[0] = '\0';
     sm->store.token_port = 0;
+}
+
+/* Every copy after the store (verify bearer, snapshot, stream headers) holds
+ * ESPOS_SK_TOKEN_CAP bytes and would clip a longer token without a word. */
+static bool token_fits(const char *tok)
+{
+    return strlen(tok) < ESPOS_SK_TOKEN_CAP;
 }
 
 /* Record where the token works. Returns true when that changed. */
@@ -303,6 +311,14 @@ void espos_sk_tok_init(espos_sk_tok_sm_t *sm, const espos_sk_tok_port_t *port, v
         sm->store = *store;
     }
     sm->st.state = ESPOS_SK_TOK_NO_SERVER;
+    if (!token_fits(sm->store.token)) {
+        /* Stored by a build with a larger CONFIG_ESPOS_SK_TOKEN_MAX. Dropped
+         * rather than clipped, and saved dropped, or every boot would drop it
+         * again and file one more access request. */
+        clear_token(sm);
+        save(sm);
+        set_error(sm, "stored token longer than CONFIG_ESPOS_SK_TOKEN_MAX; requesting access again");
+    }
     sm->st.has_token = sm->store.token[0] != '\0';
     snprintf(sm->st.pending_href, sizeof(sm->st.pending_href), "%s", sm->store.pending_href);
     sm->error_backoff_ms = ERR_MIN_MS;
@@ -560,6 +576,18 @@ void espos_sk_tok_event(espos_sk_tok_sm_t *sm, espos_sk_tok_event_t ev, const vo
             sm->error_backoff_ms = ERR_MIN_MS; /* the server answers again */
             sm->dup_backoff_ms = DUP_MIN_MS;
             if (strcmp(r->state, "COMPLETED") == 0) {
+                if (strcmp(r->permission, "APPROVED") == 0 && r->token[0] && !token_fits(r->token)) {
+                    /* Not stored, and not requested again on a timer: every
+                     * request would be one more for an admin to approve. */
+                    clear_pending(sm);
+                    save(sm);
+                    sm->st.state = ESPOS_SK_TOK_DENIED;
+                    sm->st.deny_count++;
+                    set_error(sm, ESPOS_SK_TOKEN_TOO_LONG);
+                    cancel(sm);
+                    notify(sm);
+                    return;
+                }
                 if (strcmp(r->permission, "APPROVED") == 0 && r->token[0]) {
                     snprintf(sm->store.token, sizeof(sm->store.token), "%s", r->token);
                     snprintf(sm->store.token_self, sizeof(sm->store.token_self), "%s", sm->st.server.self);
@@ -738,7 +766,7 @@ void espos_sk_tok_event(espos_sk_tok_sm_t *sm, espos_sk_tok_event_t ev, const vo
 
     case ESPOS_SK_EV_MANUAL_TOKEN: {
         const char *tok = arg;
-        if (!tok || !tok[0]) {
+        if (!tok || !tok[0] || !token_fits(tok)) {
             return;
         }
         snprintf(sm->store.token, sizeof(sm->store.token), "%s", tok);

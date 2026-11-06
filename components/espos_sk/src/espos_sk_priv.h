@@ -147,6 +147,9 @@ esp_err_t espos_sk_tls_reset_now(void);
 #else
 #define ESPOS_SK_TOKEN_CAP ESPOS_SK_TOKEN_MAX
 #endif
+/* The reason an approved token that does not fit is refused, wherever the
+ * length is caught: the reply parser or the token machine. */
+#define ESPOS_SK_TOKEN_TOO_LONG "token longer than CONFIG_ESPOS_SK_TOKEN_MAX allows; raise it, then retry"
 
 esp_err_t espos_sk_ws_start(void);
 void espos_sk_ws_stop(void);

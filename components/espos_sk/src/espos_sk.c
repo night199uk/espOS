@@ -207,7 +207,10 @@ static void narrate_token_state(void)
         ESP_LOGI(TAG, "server security is off: no token needed, streaming");
         break;
     case ESPOS_SK_TOK_DENIED:
-        ESP_LOGW(TAG, "access denied by the server — request again from the device's web UI when it is allowed");
+        /* last_error says why: an admin's no, requests switched off on the
+         * server, or a token larger than this build keeps. */
+        ESP_LOGW(TAG, "%s — request again from the device's web UI when it is allowed",
+                 s.sm.st.last_error[0] ? s.sm.st.last_error : "access denied by the server");
         break;
     case ESPOS_SK_TOK_CERT_ERROR:
         ESP_LOGW(TAG, "%s — trust it from the device's web UI (SignalK page) if the server's certificate "
