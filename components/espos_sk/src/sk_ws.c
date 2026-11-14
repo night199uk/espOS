@@ -59,6 +59,12 @@
  * internal-RAM cost. */
 #define RX_BUF_MIN 4096
 
+/* Time one message may take from its first byte to its last. It bounds the
+ * receive loop below the 20 s health watch on this task (with the connect
+ * timeout as the longest block), a half-sent message that then stalls, and a
+ * server that streams continuation frames without end. */
+#define RX_MSG_MAX_MS 5000
+
 /* TCP + TLS + WebSocket upgrade budget for one connect attempt. The error path
  * compares against it to tell a timeout apart from a refused or dropped
  * connection. */
@@ -1064,55 +1070,88 @@ static void ws_task(void *arg)
         }
         int pr = esp_transport_poll_read(ws, (int)wait);
         if (pr > 0) {
-            /* Read one whole text frame: esp_transport_ws hands payload
-             * back in buffer-sized pieces, so gather until payload_len. */
+            /* Read one whole message. esp_transport_ws hands payload back
+             * in buffer-sized pieces and a server may split a message into
+             * frames; the gather counts per frame (espos_sk_priv.h). */
             size_t have = 0;
-            bool broken = false, complete = false;
+            espos_sk_ws_gather_t gather = { 0 };
+            bool broken = false, complete = false, dropping = false, stalled = false;
+            char probe[64];
+            const uint32_t msg_start = now_ms();
             while (!complete && !broken) {
-                if (have + 1 >= cap) {
-                    if (cap >= CONFIG_ESPOS_SK_RX_FRAME_MAX) {
-                        ESP_LOGW(TAG, "frame larger than %d bytes dropped", CONFIG_ESPOS_SK_RX_FRAME_MAX);
-                        /* drain the rest of this frame */
-                        int r = esp_transport_read(ws, buf, (int)cap - 1, 100);
-                        if (r <= 0) {
-                            broken = r < 0;
-                            break;
-                        }
-                        have = 0;
-                        if (esp_transport_ws_get_read_payload_len(ws) <= r) {
-                            complete = true;   /* nothing useful in buf */
-                            have = 0;
-                        }
-                        continue;
-                    }
-                    size_t ncap = cap * 2 > (size_t)CONFIG_ESPOS_SK_RX_FRAME_MAX ? (size_t)CONFIG_ESPOS_SK_RX_FRAME_MAX : cap * 2;
-                    char *nb = realloc(buf, ncap);
-                    if (!nb) {
+                if (have || dropping) {
+                    if (now_ms() - msg_start >= RX_MSG_MAX_MS) {
+                        /* the stream is out of step with the server, and
+                         * waiting longer holds every outgoing delta */
+                        stalled = true;
                         broken = true;
                         break;
                     }
-                    buf = nb;
-                    cap = ncap;
                 }
-                int r = esp_transport_read(ws, buf + have, (int)(cap - have - 1), have ? 1000 : 100);
+                char *dst = buf + have;
+                size_t room = cap - have - 1;
+                if (have + 1 >= cap) {
+                    if (cap >= CONFIG_ESPOS_SK_RX_FRAME_MAX) {
+                        if (dropping) {
+                            /* read the rest of the message into the void */
+                            have = 0;
+                            dst = buf;
+                            room = cap - 1;
+                        } else {
+                            /* Full, but the message may already be whole
+                             * but for an empty final frame: probe for more
+                             * payload before giving up on it. */
+                            dst = probe;
+                            room = sizeof(probe);
+                        }
+                    } else {
+                        size_t ncap = cap * 2 > (size_t)CONFIG_ESPOS_SK_RX_FRAME_MAX ? (size_t)CONFIG_ESPOS_SK_RX_FRAME_MAX : cap * 2;
+                        char *nb = realloc(buf, ncap);
+                        if (!nb) {
+                            broken = true;
+                            break;
+                        }
+                        buf = nb;
+                        cap = ncap;
+                        dst = buf + have;
+                        room = cap - have - 1;
+                    }
+                }
+                int r = esp_transport_read(ws, dst, (int)room, (have || dropping) ? 1000 : 100);
                 if (r < 0) {
                     broken = true;
                     break;
                 }
                 if (r == 0) {
-                    if (have == 0) {
-                        break;      /* control frame (ping/pong) handled by the transport */
+                    ws_transport_opcodes_t op = esp_transport_ws_get_read_opcode(ws);
+                    espos_sk_ws_zero_t z = espos_sk_ws_zero_read(
+                        op == WS_TRANSPORT_OPCODES_TEXT || op == WS_TRANSPORT_OPCODES_CONT ||
+                            op == WS_TRANSPORT_OPCODES_BINARY,
+                        op == WS_TRANSPORT_OPCODES_CONT, esp_transport_ws_get_read_payload_len(ws),
+                        esp_transport_ws_get_fin_flag(ws), have || dropping);
+                    if (z == ESPOS_SK_WS_ZERO_CUT) {
+                        stalled = true;
+                        broken = true;
+                    } else if (z == ESPOS_SK_WS_ZERO_IDLE) {
+                        break;
+                    } else if (z == ESPOS_SK_WS_ZERO_DONE) {
+                        complete = true;
                     }
                     continue;
                 }
-                have += (size_t)r;
-                int total = esp_transport_ws_get_read_payload_len(ws);
-                if ((int)have >= total && esp_transport_ws_get_fin_flag(ws)) {
-                    complete = true;
-                } else if ((int)have >= total) {
-                    /* fragmented message: keep appending the next fragment */
-                    continue;
+                if (dst == probe) {
+                    ESP_LOGW(TAG, "message larger than %d bytes dropped", CONFIG_ESPOS_SK_RX_FRAME_MAX);
+                    dropping = true;
+                    have = 0;
+                } else {
+                    have += (size_t)r;
                 }
+                int total = esp_transport_ws_get_read_payload_len(ws);
+                complete = espos_sk_ws_gather_step(&gather, (size_t)r, total > 0 ? (size_t)total : 0,
+                                                   esp_transport_ws_get_fin_flag(ws));
+            }
+            if (dropping) {
+                have = 0;   /* nothing useful in buf */
             }
             if (complete && have) {
                 buf[have] = '\0';
@@ -1124,29 +1163,34 @@ static void ws_task(void *arg)
                     snprintf(s.st.last_error, sizeof(s.st.last_error), "%.60s", err);
                     unlock();
                 }
-                /* Give the growth back. One oversized frame — a server's
-                 * notification backfill at connect is the usual one — would
-                 * otherwise pin the buffer at its peak for the life of the
-                 * connection. On boards where internal RAM is the scarce
-                 * resource (PSRAM makes the total look healthy while the
-                 * largest free internal block is what actually runs out)
-                 * that is a permanent cost paid for a transient burst.
-                 * Shrink failures are ignored: keeping the larger buffer is
-                 * correct behaviour, not an error. */
-                if (cap > RX_BUF_MIN) {
-                    char *sb = realloc(buf, RX_BUF_MIN);
-                    if (sb) {
-                        buf = sb;
-                        cap = RX_BUF_MIN;
-                    }
+            }
+            /* Give the growth back, whether the message was handled,
+             * dropped or cut off. One oversized frame — a server's
+             * notification backfill at connect is the usual one — would
+             * otherwise pin the buffer at its peak for the life of the
+             * connection. On boards where internal RAM is the scarce
+             * resource (PSRAM makes the total look healthy while the
+             * largest free internal block is what actually runs out)
+             * that is a permanent cost paid for a transient burst.
+             * Shrink failures are ignored: keeping the larger buffer is
+             * correct behaviour, not an error. */
+            if (cap > RX_BUF_MIN) {
+                char *sb = realloc(buf, RX_BUF_MIN);
+                if (sb) {
+                    buf = sb;
+                    cap = RX_BUF_MIN;
                 }
             }
             if (broken) {
-                ESP_LOGW(TAG, "stream closed by server");
+                if (stalled) {
+                    ESP_LOGW(TAG, "message cut off or not complete within %d ms; reconnecting", RX_MSG_MAX_MS);
+                } else {
+                    ESP_LOGW(TAG, "stream closed by server");
+                }
                 lock();
                 s.st.connected = false;
                 unlock();
-                set_error("closed by server");
+                set_error(stalled ? "message incomplete" : "closed by server");
                 esp_transport_close(ws);
                 connected = false;
                 set_stream_connected(false);

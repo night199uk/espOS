@@ -277,6 +277,55 @@ bool espos_sk_stream_allowed(void);
 void espos_sk_time_start(void);
 void espos_sk_time_stop(void);
 
+/* Message boundaries on the stream (sk_ws.c, pure). esp_transport_ws hands a
+ * frame's payload back in pieces and reports only the CURRENT frame's length
+ * and fin flag, so a message split into frames must be counted per frame:
+ * bytes of earlier fragments, compared with a later fragment's length, would
+ * end the message before that fragment has arrived. Feed every payload read;
+ * true once the read that finished a frame carrying fin has been fed, which
+ * is the end of a message. */
+typedef struct {
+    size_t frame_have;
+} espos_sk_ws_gather_t;
+
+static inline bool espos_sk_ws_gather_step(espos_sk_ws_gather_t *g, size_t r, size_t payload_len, bool fin)
+{
+    g->frame_have += r;
+    if (g->frame_have < payload_len) {
+        return false;
+    }
+    g->frame_have = 0; /* the next read starts a new frame */
+    return fin;
+}
+
+/* What a 0-byte read means, from the transport's view of the frame it last
+ * read a header for. A data frame with payload still owed is a read that
+ * timed out mid-payload (IDF before 6.0.3 forgets the frame then, so the
+ * stream is lost). Outside a message it is a control frame or a quiet line;
+ * inside one, an empty continuation carrying fin ends the message and
+ * anything else is waiting. */
+typedef enum {
+    ESPOS_SK_WS_ZERO_IDLE,  /* nothing started: back to the send path */
+    ESPOS_SK_WS_ZERO_WAIT,  /* inside a message: read again */
+    ESPOS_SK_WS_ZERO_DONE,  /* the message is complete */
+    ESPOS_SK_WS_ZERO_CUT,   /* payload cut off: reconnect */
+} espos_sk_ws_zero_t;
+
+static inline espos_sk_ws_zero_t espos_sk_ws_zero_read(bool data_frame, bool continuation, int payload_len,
+                                                       bool fin, bool in_message)
+{
+    if (data_frame && payload_len > 0) {
+        return ESPOS_SK_WS_ZERO_CUT;
+    }
+    if (!in_message) {
+        return ESPOS_SK_WS_ZERO_IDLE;
+    }
+    if (continuation && payload_len == 0 && fin) {
+        return ESPOS_SK_WS_ZERO_DONE;
+    }
+    return ESPOS_SK_WS_ZERO_WAIT;
+}
+
 #ifdef __cplusplus
 }
 #endif
