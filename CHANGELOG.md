@@ -15,6 +15,21 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.29.1 (2026-11-14)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Fixed
+* fix(sk): count stream message bytes per frame by @dirkwa in https://github.com/signalk-espOS/espOS/pull/310
+### Other
+* fix(httpd): serve the config schema from flash, not a heap copy by @marcelrv in https://github.com/signalk-espOS/espOS/pull/309
+
+## New Contributors
+* @marcelrv made their first contribution in https://github.com/signalk-espOS/espOS/pull/309
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.29.0...v0.29.1
+
 ## 0.29.0 (2026-11-11)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
