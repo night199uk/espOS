@@ -10,6 +10,7 @@
 #include "esp_log.h"
 
 #include "espos_config.h"
+#include "espos_config_desc.h"
 #include "espos_httpd.h"
 #include "espos_httpd_priv.h"
 
@@ -97,6 +98,16 @@ static esp_err_t schema_get(httpd_req_t *req)
         httpd_resp_set_status(req, "304 Not Modified");
         httpd_resp_set_hdr(req, "ETag", etag);
         return httpd_resp_send(req, NULL, 0);
+    }
+    if (espos_config_runtime_ns_count() == 0) {
+        /* No runtime namespace: the document is the compiled text, so send
+         * it straight from flash. A heap copy needs one contiguous block the
+         * size of the schema (tens of KB), which a classic ESP32 without
+         * PSRAM often does not have. */
+        httpd_resp_set_type(req, "application/schema+json");
+        httpd_resp_set_hdr(req, "ETag", etag);
+        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+        return httpd_resp_send(req, espos_cfg_schema_json, (ssize_t)espos_cfg_schema_json_len);
     }
     char *json = NULL;
     esp_err_t err = espos_config_schema_json(&json, NULL);
