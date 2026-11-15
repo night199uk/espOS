@@ -403,7 +403,7 @@ static int verify_cb(void *ctx, mbedtls_x509_crt *crt, int depth, uint32_t *flag
         .ca_present = s.cap.have_ca,
         .ca_matches = s.cap.have_ca && memcmp(s.cap.ca_fp, s.anchor.ca_fp, ESPOS_SK_TLS_FP_LEN) == 0,
         .leaf_has_san = s.cap.san[0] != '\0' && !san_cut,
-        .san_matches = espos_sk_tls_san_equal(s.cap.san, s.anchor.san),
+        .san_matches = espos_sk_tls_san_matches_anchor(s.anchor.san, s.cap.san),
     };
     espos_sk_tls_decision_t d = espos_sk_tls_decide(&f);
 

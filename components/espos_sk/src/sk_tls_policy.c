@@ -171,3 +171,14 @@ bool espos_sk_tls_san_equal(const char *a, const char *b)
     }
     return strcmp(a, b) == 0;
 }
+
+bool espos_sk_tls_san_matches_anchor(const char *stored, const char *presented)
+{
+    /* A CA supplied by configuration is anchored before any handshake has
+     * named the server, so its SAN set starts empty. The first leaf this CA
+     * signs binds the set at commit; once bound, a different set is refused. */
+    if (!stored || !stored[0]) {
+        return true;
+    }
+    return espos_sk_tls_san_equal(stored, presented);
+}
