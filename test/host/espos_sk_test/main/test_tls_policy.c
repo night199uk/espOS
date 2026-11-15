@@ -181,6 +181,19 @@ TEST_CASE("an empty SAN set is empty, and never equal to anything", "[sk_tls]")
     TEST_ASSERT_FALSE(espos_sk_tls_san_equal(NULL, "boat.local"));
 }
 
+TEST_CASE("an empty stored SAN set binds the first leaf; a stored one must match", "[sk_tls]")
+{
+    /* sk.ca_pem anchors the CA before any handshake has named the server, so
+     * the stored set is empty. This is what lets the first leaf through; the
+     * commit then stores its set and later connections are held to it. */
+    TEST_ASSERT_TRUE(espos_sk_tls_san_matches_anchor("", "boat.local"));
+    TEST_ASSERT_TRUE(espos_sk_tls_san_matches_anchor(NULL, "boat.local"));
+    TEST_ASSERT_TRUE(espos_sk_tls_san_matches_anchor("boat.local", "boat.local"));
+    TEST_ASSERT_FALSE(espos_sk_tls_san_matches_anchor("boat.local", "other.local"));
+    TEST_ASSERT_FALSE(espos_sk_tls_san_matches_anchor("boat.local", ""));
+    TEST_ASSERT_FALSE(espos_sk_tls_san_matches_anchor("!boat.local", "boat.local"));
+}
+
 TEST_CASE("a SAN set that does not fit is refused, not silently shortened", "[sk_tls]")
 {
     /* The dangerous failure: storing the two names that fitted, then later

@@ -146,6 +146,14 @@ esp_err_t espos_sk_tls_san_normalise(const char *const *in, size_t n, char *out,
 bool espos_sk_tls_san_equal(const char *a, const char *b);
 
 /**
+ * Whether a presented SAN set satisfies the stored anchor. An empty stored set
+ * means a CA was supplied by configuration before any handshake named the
+ * server: this connection binds the set, so anything the pinned CA signed is
+ * acceptable here. Once a set is stored, the two must compare equal.
+ */
+bool espos_sk_tls_san_matches_anchor(const char *stored, const char *presented);
+
+/**
  * The esp-tls attach hook, in the shape esp_http_client's `crt_bundle_attach`
  * and esp_transport_ssl_crt_bundle_attach() both want. In bundle mode it is
  * esp_crt_bundle_attach(); otherwise it installs the pinning verify callback,
