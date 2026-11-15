@@ -633,15 +633,20 @@ mode.**
     a server cannot hang a copy of the CA's public certificate over a leaf
     it made itself; such a chain is refused as "not signed by the pinned CA".
   * **A leaf record**: the SHA-256 of the server's certificate itself, used
-    when the chain has no CA or the certificate lists no names.
+    when the chain has no CA, or the certificate lists no names or more than
+    the device can record whole: eight, each up to 63 characters, and 255
+    characters for the whole set with commas between the names.
     signalk-server's own self-signed certificate ends up here, and a renewal
     then needs one deliberate press of "Trust the new certificate".
 * **`ca`** works the same way, but you supply the CA instead of the device
   recording it. Put the issuing CA in `sk.ca_pem` (a blob, base64 over the
   REST API), or send `PUT /api/v1/sk/tls/ca {"pem": "-----BEGIN CERTIFICATE-----…"}`.
   The device trusts it immediately, so a fleet set up in advance connects on
-  the first try with nothing to record. An invalid PEM is answered `400`,
-  rather than leaving a device that quietly stops connecting.
+  the first try with nothing to record. That first connection binds the
+  server's names to the CA, and they stay bound across reboots: later
+  certificates from the same CA must name the same hosts. Supplying a
+  different CA starts over. An invalid PEM is answered `400`, rather than
+  leaving a device that quietly stops connecting.
 * **`bundle`** uses the public Mozilla roots and records nothing, for a
   server with a certificate from a real certificate authority.
 

@@ -122,6 +122,23 @@ espos_sk_tls_decision_t espos_sk_tls_decide(const espos_sk_tls_facts_t *f);
 /** A human sentence for a reason code; never NULL, never empty. */
 const char *espos_sk_tls_reason_str(espos_sk_tls_reason_t r);
 
+/* What loading the configured CA (sk.ca_pem) does to the stored anchor. */
+typedef enum {
+    ESPOS_SK_TLS_CA_KEEP = 0,     /* the stored anchor already is this CA: keep it, bound names and all */
+    ESPOS_SK_TLS_CA_REANCHOR = 1, /* replace it with a fresh, unbound anchor on this CA */
+} espos_sk_tls_ca_load_t;
+
+/**
+ * Decide what loading the configured CA does, given the stored anchor's kind
+ * and CA fingerprint and the configured CA's fingerprint. The PEM is loaded
+ * again at every boot, so KEEP is the normal answer: the SAN set and leaf a
+ * CA anchor has bound are part of what it stands for, and a fresh anchor
+ * would let the next leaf the CA signed, for any name, bind again. Anything
+ * but a CA anchor on the same fingerprint is REANCHOR.
+ */
+espos_sk_tls_ca_load_t espos_sk_tls_ca_load(espos_sk_tls_anchor_kind_t kind, const uint8_t *anchor_ca_fp,
+                                            const uint8_t *ca_fp);
+
 /**
  * Normalise a SAN set into the stored form: each name lower-cased, the set
  * sorted and de-duplicated, entries joined with a single ',' and no spaces —
@@ -137,6 +154,40 @@ const char *espos_sk_tls_reason_str(espos_sk_tls_reason_t r);
  */
 esp_err_t espos_sk_tls_san_normalise(const char *const *in, size_t n, char *out, size_t out_size,
                                      bool *truncated);
+
+/* How many names, and how long each, a SAN set can hold while being built.
+ * A certificate past either limit gives a cut set, which never matches. */
+#define ESPOS_SK_TLS_SAN_ENTRY_MAX 8
+#define ESPOS_SK_TLS_SAN_NAME_MAX  64
+
+/* The SAN entry types that name a host (the context-specific tag numbers of
+ * RFC 5280 GeneralName); every other type is skipped. */
+#define ESPOS_SK_TLS_SAN_TAG_DNS 2
+#define ESPOS_SK_TLS_SAN_TAG_IP  7
+
+/* Collects a leaf's SAN entries into a set, one entry at a time, so the
+ * caller can walk mbedTLS's sequence without allocating. Zero it to start. */
+typedef struct {
+    char names[ESPOS_SK_TLS_SAN_ENTRY_MAX][ESPOS_SK_TLS_SAN_NAME_MAX];
+    const char *ptrs[ESPOS_SK_TLS_SAN_ENTRY_MAX];
+    size_t n;
+    bool cut; /* a name did not fit, could not be read whole, or there were too many */
+} espos_sk_tls_san_builder_t;
+
+/**
+ * Add one raw SAN entry: a dNSName (string) or an iPAddress (4 or 16 bytes).
+ * Other tags and other IP lengths are skipped. A dNSName longer than 63 bytes
+ * or holding a NUL marks the set cut instead of being stored as its prefix,
+ * which would compare equal to a different name sharing that prefix.
+ */
+void espos_sk_tls_san_add(espos_sk_tls_san_builder_t *b, unsigned tag, const uint8_t *p, size_t len);
+
+/**
+ * Write the collected set in the stored form (espos_sk_tls_san_normalise).
+ * A cut set is written with a leading '!', so it never compares equal, and
+ * *truncated is set.
+ */
+void espos_sk_tls_san_finish(espos_sk_tls_san_builder_t *b, char *out, size_t out_size, bool *truncated);
 
 /**
  * Compare two normalised SAN sets. False when either is empty or either was

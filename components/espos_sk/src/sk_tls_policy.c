@@ -80,6 +80,16 @@ espos_sk_tls_decision_t espos_sk_tls_decide(const espos_sk_tls_facts_t *f)
     return d;
 }
 
+espos_sk_tls_ca_load_t espos_sk_tls_ca_load(espos_sk_tls_anchor_kind_t kind, const uint8_t *anchor_ca_fp,
+                                            const uint8_t *ca_fp)
+{
+    if (kind == ESPOS_SK_TLS_ANCHOR_CA && anchor_ca_fp && ca_fp &&
+        memcmp(anchor_ca_fp, ca_fp, ESPOS_SK_TLS_FP_LEN) == 0) {
+        return ESPOS_SK_TLS_CA_KEEP;
+    }
+    return ESPOS_SK_TLS_CA_REANCHOR;
+}
+
 const char *espos_sk_tls_reason_str(espos_sk_tls_reason_t r)
 {
     switch (r) {
@@ -181,6 +191,64 @@ bool espos_sk_tls_san_equal(const char *a, const char *b)
         return false; /* an incomplete set is never proof of sameness */
     }
     return strcmp(a, b) == 0;
+}
+
+void espos_sk_tls_san_add(espos_sk_tls_san_builder_t *b, unsigned tag, const uint8_t *p, size_t len)
+{
+    if (!b || !p || len == 0) {
+        return;
+    }
+    bool is_name = tag == ESPOS_SK_TLS_SAN_TAG_DNS || (tag == ESPOS_SK_TLS_SAN_TAG_IP && (len == 4 || len == 16));
+    if (!is_name || b->cut) {
+        return;
+    }
+    if (b->n >= ESPOS_SK_TLS_SAN_ENTRY_MAX) {
+        b->cut = true;
+        return;
+    }
+    char *name = b->names[b->n];
+    if (tag == ESPOS_SK_TLS_SAN_TAG_DNS) {
+        if (len > ESPOS_SK_TLS_SAN_NAME_MAX - 1 || memchr(p, '\0', len)) {
+            b->cut = true;
+            return;
+        }
+        memcpy(name, p, len);
+        name[len] = '\0';
+    } else if (len == 4) {
+        snprintf(name, ESPOS_SK_TLS_SAN_NAME_MAX, "%u.%u.%u.%u", p[0], p[1], p[2], p[3]);
+    } else {
+        char *w = name;
+        for (int i = 0; i < 16; i += 2) {
+            w += snprintf(w, (size_t)(name + ESPOS_SK_TLS_SAN_NAME_MAX - w), "%s%02x%02x", i ? ":" : "", p[i],
+                          p[i + 1]);
+        }
+    }
+    b->ptrs[b->n] = name;
+    b->n++;
+}
+
+void espos_sk_tls_san_finish(espos_sk_tls_san_builder_t *b, char *out, size_t out_size, bool *truncated)
+{
+    if (truncated) {
+        *truncated = false;
+    }
+    if (!b || !out || out_size == 0) {
+        return;
+    }
+    bool cut = false;
+    if (espos_sk_tls_san_normalise(b->ptrs, b->n, out, out_size, &cut) != ESP_OK || cut || b->cut) {
+        /* A set we could not record whole is marked, and a marked set never
+         * compares equal (espos_sk_tls_san_equal), so it can only ever refuse
+         * -- never accept a certificate on the strength of the part we saw. */
+        if (out_size > 1) {
+            memmove(out + 1, out, out_size - 2);
+            out[0] = SAN_TRUNC_MARK;
+            out[out_size - 1] = '\0';
+        }
+        if (truncated) {
+            *truncated = true;
+        }
+    }
 }
 
 bool espos_sk_tls_san_matches_anchor(const char *stored, const char *presented)

@@ -299,64 +299,19 @@ static void crt_cn(const mbedtls_x509_crt *crt, char *out, size_t n)
  * policy compares. Walks the raw sequence rather than
  * mbedtls_x509_parse_subject_alt_name(), which allocates per entry: this runs
  * inside a handshake, on a stack we do not own, in the memory situation the
- * pre-flight check exists to protect. */
-#define SAN_ENTRY_MAX 8
-#define SAN_NAME_MAX  64
+ * pre-flight check exists to protect. The rules for each entry are the
+ * policy's (espos_sk_tls_san_add), where the host test reaches them. */
+_Static_assert(ESPOS_SK_TLS_SAN_TAG_DNS == MBEDTLS_X509_SAN_DNS_NAME, "dNSName tag");
+_Static_assert(ESPOS_SK_TLS_SAN_TAG_IP == MBEDTLS_X509_SAN_IP_ADDRESS, "iPAddress tag");
 
 static void crt_san_set(const mbedtls_x509_crt *crt, char *out, size_t out_size, bool *truncated)
 {
-    char names[SAN_ENTRY_MAX][SAN_NAME_MAX];
-    const char *ptrs[SAN_ENTRY_MAX];
-    size_t n = 0;
-    bool overflow = false;
+    espos_sk_tls_san_builder_t b;
+    memset(&b, 0, sizeof(b));
     for (const mbedtls_x509_sequence *cur = &crt->subject_alt_names; cur; cur = cur->next) {
-        if (cur->buf.len == 0 || !cur->buf.p) {
-            continue;
-        }
-        /* Context-specific tag: 2 = dNSName (a string), 7 = iPAddress (4 or
-         * 16 raw bytes). Everything else -- e-mail, URI, directoryName -- says
-         * nothing about which host this is and is skipped. */
-        unsigned tag = cur->buf.tag & MBEDTLS_ASN1_TAG_VALUE_MASK;
-        if (n >= SAN_ENTRY_MAX) {
-            overflow = true;
-            break;
-        }
-        if (tag == MBEDTLS_X509_SAN_DNS_NAME) {
-            size_t len = cur->buf.len < SAN_NAME_MAX - 1 ? cur->buf.len : SAN_NAME_MAX - 1;
-            memcpy(names[n], cur->buf.p, len);
-            names[n][len] = '\0';
-        } else if (tag == MBEDTLS_X509_SAN_IP_ADDRESS && cur->buf.len == 4) {
-            snprintf(names[n], SAN_NAME_MAX, "%u.%u.%u.%u", cur->buf.p[0], cur->buf.p[1], cur->buf.p[2], cur->buf.p[3]);
-        } else if (tag == MBEDTLS_X509_SAN_IP_ADDRESS && cur->buf.len == 16) {
-            char *w = names[n];
-            for (int i = 0; i < 16; i += 2) {
-                w += snprintf(w, (size_t)(names[n] + SAN_NAME_MAX - w), "%s%02x%02x", i ? ":" : "", cur->buf.p[i],
-                              cur->buf.p[i + 1]);
-            }
-        } else {
-            continue;
-        }
-        ptrs[n] = names[n];
-        n++;
+        espos_sk_tls_san_add(&b, cur->buf.tag & MBEDTLS_ASN1_TAG_VALUE_MASK, cur->buf.p, cur->buf.len);
     }
-    bool cut = false;
-    if (espos_sk_tls_san_normalise(ptrs, n, out, out_size, &cut) != ESP_OK || cut || overflow) {
-        /* A set we could not record whole is marked, and a marked set never
-         * compares equal (espos_sk_tls_san_equal), so it can only ever refuse
-         * -- never accept a certificate on the strength of the part we saw. */
-        if (out_size > 1) {
-            memmove(out + 1, out, out_size - 2);
-            out[0] = '!';
-            out[out_size - 1] = '\0';
-        }
-        if (truncated) {
-            *truncated = true;
-        }
-        return;
-    }
-    if (truncated) {
-        *truncated = false;
-    }
+    espos_sk_tls_san_finish(&b, out, out_size, truncated);
 }
 
 /* ---------------------------------------------------------- verify callback */
@@ -499,6 +454,12 @@ void espos_sk_tls_set_trust(espos_sk_tls_trust_t trust, const char *ca_pem)
              * the first try instead of pinning whatever answered first. */
             anchor_t a = { .kind = ESPOS_SK_TLS_ANCHOR_CA, .pinned_unix = pinned_now_unix() };
             crt_fingerprint(&s.ca_crt, a.ca_fp);
+            /* s.ca_pem lives in RAM, so every boot reaches this point; the
+             * policy decides whether the anchor NVS holds survives it. */
+            if (espos_sk_tls_ca_load(s.anchor.kind, s.anchor.ca_fp, a.ca_fp) == ESPOS_SK_TLS_CA_KEEP) {
+                unlock();
+                return;
+            }
             crt_cn(&s.ca_crt, a.cn, sizeof(a.cn));
             /* No SAN yet: the CA does not name the server. The first
              * successful connect binds the leaf's set (commit below). */

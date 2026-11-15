@@ -495,3 +495,99 @@ TEST_CASE("over TLS one 401 clears the token immediately", "[sk_tok]")
     TEST_ASSERT_EQUAL_STRING("", TSM.store.token);
     TEST_ASSERT_EQUAL(1, G.requests);
 }
+
+TEST_CASE("reloading the configured CA keeps an anchor already on that CA", "[sk_tls]")
+{
+    /* sk.ca_pem is loaded again at every boot. Re-creating the anchor then
+     * would drop the SAN set the first connection bound, and the next leaf
+     * the CA signed, for any name, would bind afresh. */
+    uint8_t ca[ESPOS_SK_TLS_FP_LEN], other[ESPOS_SK_TLS_FP_LEN];
+    memset(ca, 0xA5, sizeof(ca));
+    memset(other, 0xA5, sizeof(other));
+    other[ESPOS_SK_TLS_FP_LEN - 1] ^= 1;
+
+    /* The boot reload: the anchor the first connection bound stays. */
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_CA_KEEP, espos_sk_tls_ca_load(ESPOS_SK_TLS_ANCHOR_CA, ca, ca));
+    /* A different CA, a TOFU leaf pin, nothing stored, or nothing to compare:
+     * the configured CA becomes a fresh anchor. */
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_CA_REANCHOR, espos_sk_tls_ca_load(ESPOS_SK_TLS_ANCHOR_CA, other, ca));
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_CA_REANCHOR, espos_sk_tls_ca_load(ESPOS_SK_TLS_ANCHOR_LEAF, ca, ca));
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_CA_REANCHOR, espos_sk_tls_ca_load(ESPOS_SK_TLS_ANCHOR_NONE, ca, ca));
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_CA_REANCHOR, espos_sk_tls_ca_load(ESPOS_SK_TLS_ANCHOR_CA, NULL, ca));
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_CA_REANCHOR, espos_sk_tls_ca_load(ESPOS_SK_TLS_ANCHOR_CA, ca, NULL));
+}
+
+/* ------------------------------------------------------ SAN collection */
+
+static void san_add_str(espos_sk_tls_san_builder_t *b, unsigned tag, const char *s, size_t len)
+{
+    espos_sk_tls_san_add(b, tag, (const uint8_t *)s, len);
+}
+
+TEST_CASE("SAN entries become one set: names and IPs kept, other types skipped", "[sk_tls]")
+{
+    espos_sk_tls_san_builder_t b = { 0 };
+    char out[ESPOS_SK_TLS_SAN_MAX];
+    bool cut = true;
+    const uint8_t ip4[4] = { 192, 168, 1, 10 };
+    const uint8_t ip6[16] = { 0xfe, 0x80, [15] = 1 };
+    san_add_str(&b, ESPOS_SK_TLS_SAN_TAG_DNS, "Boat.local", 10);
+    espos_sk_tls_san_add(&b, ESPOS_SK_TLS_SAN_TAG_IP, ip4, sizeof(ip4));
+    espos_sk_tls_san_add(&b, ESPOS_SK_TLS_SAN_TAG_IP, ip6, sizeof(ip6));
+    espos_sk_tls_san_add(&b, ESPOS_SK_TLS_SAN_TAG_IP, ip4, 3); /* not an address: skipped */
+    san_add_str(&b, 6, "https://boat.local/", 19);               /* a URI: skipped */
+    espos_sk_tls_san_finish(&b, out, sizeof(out), &cut);
+    TEST_ASSERT_FALSE(cut);
+    TEST_ASSERT_EQUAL_STRING("192.168.1.10,boat.local,fe80:0000:0000:0000:0000:0000:0000:0001", out);
+}
+
+TEST_CASE("a 63-byte name fits; a 64-byte name or an embedded NUL cuts the set", "[sk_tls]")
+{
+    char name[65];
+    memset(name, 'a', sizeof(name));
+    char out[ESPOS_SK_TLS_SAN_MAX];
+    bool cut = true;
+
+    espos_sk_tls_san_builder_t b = { 0 };
+    san_add_str(&b, ESPOS_SK_TLS_SAN_TAG_DNS, name, 63);
+    espos_sk_tls_san_finish(&b, out, sizeof(out), &cut);
+    TEST_ASSERT_FALSE(cut);
+    TEST_ASSERT_EQUAL(63, strlen(out));
+
+    /* Kept as its first 63 bytes, a longer name would equal any other name
+     * sharing them. */
+    b = (espos_sk_tls_san_builder_t) { 0 };
+    san_add_str(&b, ESPOS_SK_TLS_SAN_TAG_DNS, name, 64);
+    espos_sk_tls_san_finish(&b, out, sizeof(out), &cut);
+    TEST_ASSERT_TRUE(cut);
+    TEST_ASSERT_EQUAL('!', out[0]);
+
+    /* "boat.local\0.other" read as a C string would be "boat.local". */
+    b = (espos_sk_tls_san_builder_t) { 0 };
+    san_add_str(&b, ESPOS_SK_TLS_SAN_TAG_DNS, "boat.local\0.other", 17);
+    espos_sk_tls_san_finish(&b, out, sizeof(out), &cut);
+    TEST_ASSERT_TRUE(cut);
+    TEST_ASSERT_FALSE(espos_sk_tls_san_equal(out, "boat.local"));
+}
+
+TEST_CASE("only host names count against the entry limit", "[sk_tls]")
+{
+    char out[ESPOS_SK_TLS_SAN_MAX];
+    bool cut = true;
+    char name[8];
+
+    espos_sk_tls_san_builder_t b = { 0 };
+    for (int i = 0; i < ESPOS_SK_TLS_SAN_ENTRY_MAX; i++) {
+        int len = snprintf(name, sizeof(name), "h%d.lan", i);
+        san_add_str(&b, ESPOS_SK_TLS_SAN_TAG_DNS, name, (size_t)len);
+    }
+    san_add_str(&b, 1, "ops@boat.lan", 12); /* an e-mail address after eight names */
+    espos_sk_tls_san_finish(&b, out, sizeof(out), &cut);
+    TEST_ASSERT_FALSE(cut);
+
+    /* A ninth host name does not fit. */
+    san_add_str(&b, ESPOS_SK_TLS_SAN_TAG_DNS, "h8.lan", 6);
+    espos_sk_tls_san_finish(&b, out, sizeof(out), &cut);
+    TEST_ASSERT_TRUE(cut);
+    TEST_ASSERT_EQUAL('!', out[0]);
+}
