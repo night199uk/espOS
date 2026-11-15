@@ -15,6 +15,20 @@ pull request. The `[Unreleased]` block below was written by hand before the
 switch; its entries belong to the next feature release and are folded into
 that section when it is cut.
 
+## 0.29.2 (2026-11-15)
+
+<!-- Release notes generated using configuration in .github/release.yml at main -->
+
+## What's Changed
+### Fixed
+* fix(sk): refuse a CA anchor over a forged chain link by @dirkwa in https://github.com/signalk-espOS/espOS/pull/315
+* fix(sk): keep the bound CA anchor across reboots by @dirkwa in https://github.com/signalk-espOS/espOS/pull/314
+### Other
+* fix(sk): accept the first leaf under a pre-seeded CA by @night199uk in https://github.com/signalk-espOS/espOS/pull/313
+
+
+**Full Changelog**: https://github.com/signalk-espOS/espOS/compare/v0.29.1...v0.29.2
+
 ## 0.29.1 (2026-11-14)
 
 <!-- Release notes generated using configuration in .github/release.yml at main -->
