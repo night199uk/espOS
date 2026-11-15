@@ -103,6 +103,8 @@ typedef struct {
     uint8_t leaf_fp[ESPOS_SK_TLS_FP_LEN];
     uint8_t ca_fp[ESPOS_SK_TLS_FP_LEN];
     bool have_ca;
+    bool top_seen;     /* the callback has been called for the top of the chain */
+    bool chain_broken; /* a certificate below the top is not signed by its parent */
     char san[ESPOS_SK_TLS_SAN_MAX];
     char cn[ESPOS_SK_TLS_CN_MAX];
 } capture_t;
@@ -371,6 +373,15 @@ static int verify_cb(void *ctx, mbedtls_x509_crt *crt, int depth, uint32_t *flag
         return 0;
     }
     lock();
+    /* mbedTLS takes a parent from the presented chain even when its signature
+     * on the child does not verify, and only marks the child NOT_TRUSTED.
+     * Below the top, where "no parent" cannot be the reason, that flag means
+     * the link is forged: someone can hang the pinned CA's public certificate
+     * over a leaf of their own. The top is NOT_TRUSTED for a private CA. */
+    if (s.cap.top_seen && (*flags & MBEDTLS_X509_BADCERT_NOT_TRUSTED)) {
+        s.cap.chain_broken = true;
+    }
+    s.cap.top_seen = true;
     if (depth > 0) {
         if (mbedtls_x509_crt_get_ca_istrue(crt) == 1) {
             /* Highest first: the first CA we are handed is the top of what
@@ -400,12 +411,21 @@ static int verify_cb(void *ctx, mbedtls_x509_crt *crt, int depth, uint32_t *flag
         .has_anchor = s.anchor.kind != ESPOS_SK_TLS_ANCHOR_NONE,
         .anchor_is_leaf = s.anchor.kind == ESPOS_SK_TLS_ANCHOR_LEAF,
         .leaf_matches = memcmp(s.cap.leaf_fp, s.anchor.leaf_fp, ESPOS_SK_TLS_FP_LEN) == 0,
+        .chain_forged = s.cap.chain_broken,
         .ca_present = s.cap.have_ca,
         .ca_matches = s.cap.have_ca && memcmp(s.cap.ca_fp, s.anchor.ca_fp, ESPOS_SK_TLS_FP_LEN) == 0,
         .leaf_has_san = s.cap.san[0] != '\0' && !san_cut,
         .san_matches = espos_sk_tls_san_equal(s.cap.san, s.anchor.san),
     };
     espos_sk_tls_decision_t d = espos_sk_tls_decide(&f);
+    /* A CA that signed nothing must not reach the anchor through commit. */
+    if (s.cap.chain_broken) {
+        s.cap.have_ca = false;
+    }
+    /* Depth 0 ends the walk. A caller that skips espos_sk_tls_handshake_begin()
+     * still gets a clean start for the next chain. */
+    s.cap.top_seen = false;
+    s.cap.chain_broken = false;
 
     /* What the operator sees on the SignalK page as "presented", whatever the
      * verdict -- a rejected certificate is exactly the one worth showing. */

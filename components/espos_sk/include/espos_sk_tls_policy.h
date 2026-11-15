@@ -83,11 +83,12 @@ typedef enum {
     ESPOS_SK_TLS_R_CA_CHANGED,    /* CA anchor, and the presented CA differs */
     ESPOS_SK_TLS_R_SAN_CHANGED,   /* CA matches but the leaf now names other hosts */
     ESPOS_SK_TLS_R_NO_IDENTITY,   /* CA anchored, presented leaf has no SAN to compare */
+    ESPOS_SK_TLS_R_CHAIN_FORGED,  /* CA anchored, but a link in the chain is not signed by its parent */
 } espos_sk_tls_reason_t;
 
 /* Everything the decision depends on, filled in by the verify callback.
  * Deliberately booleans and not certificates: the parsing lives in sk_tls.c,
- * the judgement lives here, and a host test writes these five fields by hand. */
+ * the judgement lives here, and a host test writes these fields by hand. */
 typedef struct {
     bool has_anchor;       /* an anchor of some kind is stored */
     bool anchor_is_leaf;   /* ... and it is a leaf fingerprint (else a CA) */
@@ -96,6 +97,7 @@ typedef struct {
     bool ca_matches;       /* ... and its fingerprint == the stored CA's */
     bool leaf_has_san;     /* the presented leaf carries at least one dNSName/IP SAN */
     bool san_matches;      /* ... and the normalised set equals the stored one */
+    bool chain_forged;     /* a certificate below the top fails its parent's signature */
 } espos_sk_tls_facts_t;
 
 typedef struct {

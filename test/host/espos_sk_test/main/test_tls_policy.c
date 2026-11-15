@@ -108,9 +108,43 @@ TEST_CASE("CA anchor: a different CA, other names, or no name is refused", "[sk_
     TEST_ASSERT_EQUAL(ESPOS_SK_TLS_R_NO_IDENTITY, d.reason);
 }
 
+TEST_CASE("a forged link under the pinned CA is refused, and on first use pins the leaf", "[sk_tls]")
+{
+    /* The pinned CA's certificate is public, so a server can hang it over a
+     * leaf of its own: the CA fingerprint and even the names then match. */
+    espos_sk_tls_facts_t f = {
+        .has_anchor = true,
+        .ca_present = true,
+        .ca_matches = true,
+        .leaf_has_san = true,
+        .san_matches = true,
+        .chain_forged = true,
+    };
+    espos_sk_tls_decision_t d = espos_sk_tls_decide(&f);
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_REJECT, d.verdict);
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_R_CHAIN_FORGED, d.reason);
+    TEST_ASSERT_NOT_NULL(strstr(espos_sk_tls_reason_str(d.reason), "pinned CA"));
+
+    /* A different CA stays CA_CHANGED, forged or not. */
+    f.ca_matches = false;
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_R_CA_CHANGED, espos_sk_tls_decide(&f).reason);
+
+    /* A leaf anchor holds the exact certificate, so the chain does not matter. */
+    f.anchor_is_leaf = true;
+    f.leaf_matches = true;
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_ACCEPT, espos_sk_tls_decide(&f).verdict);
+
+    /* First use: nothing is pinned yet, so accept, but never anchor at a CA
+     * that did not sign the chain. */
+    f = (espos_sk_tls_facts_t) { .ca_present = true, .leaf_has_san = true, .chain_forged = true };
+    d = espos_sk_tls_decide(&f);
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_CAPTURE, d.verdict);
+    TEST_ASSERT_EQUAL(ESPOS_SK_TLS_ANCHOR_LEAF, d.capture_as);
+}
+
 TEST_CASE("every reason has a sentence", "[sk_tls]")
 {
-    for (int r = ESPOS_SK_TLS_R_OK; r <= ESPOS_SK_TLS_R_NO_IDENTITY; r++) {
+    for (int r = ESPOS_SK_TLS_R_OK; r <= ESPOS_SK_TLS_R_CHAIN_FORGED; r++) {
         const char *s = espos_sk_tls_reason_str((espos_sk_tls_reason_t)r);
         TEST_ASSERT_NOT_NULL(s);
         TEST_ASSERT_TRUE(s[0] != '\0');

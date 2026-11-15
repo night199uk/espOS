@@ -34,7 +34,10 @@ espos_sk_tls_decision_t espos_sk_tls_decide(const espos_sk_tls_facts_t *f)
          * trust than the operator asked for, so that case pins the leaf. */
         d.verdict = ESPOS_SK_TLS_CAPTURE;
         d.reason = ESPOS_SK_TLS_R_FIRST_USE;
-        d.capture_as = (f->ca_present && f->leaf_has_san) ? ESPOS_SK_TLS_ANCHOR_CA : ESPOS_SK_TLS_ANCHOR_LEAF;
+        /* A CA that did not sign the chain vouches for nothing, so a forged
+         * link pins the leaf, as if there were no CA at all. */
+        d.capture_as = (f->ca_present && f->leaf_has_san && !f->chain_forged) ? ESPOS_SK_TLS_ANCHOR_CA
+                                                                              : ESPOS_SK_TLS_ANCHOR_LEAF;
         return d;
     }
     if (f->anchor_is_leaf) {
@@ -52,6 +55,13 @@ espos_sk_tls_decision_t espos_sk_tls_decide(const espos_sk_tls_facts_t *f)
      * be signed by the pinned CA and name the same hosts. */
     if (!f->ca_present || !f->ca_matches) {
         d.reason = ESPOS_SK_TLS_R_CA_CHANGED;
+        return d;
+    }
+    if (f->chain_forged) {
+        /* The pinned CA's certificate is public: anyone can hang it over a
+         * leaf of their own. Said apart from CA_CHANGED, because that one
+         * reads like a renewal and invites "Trust the new certificate". */
+        d.reason = ESPOS_SK_TLS_R_CHAIN_FORGED;
         return d;
     }
     if (!f->leaf_has_san) {
@@ -79,6 +89,7 @@ const char *espos_sk_tls_reason_str(espos_sk_tls_reason_t r)
     case ESPOS_SK_TLS_R_CA_CHANGED: return "the server certificate was issued by a different CA";
     case ESPOS_SK_TLS_R_SAN_CHANGED: return "the server certificate now names different hosts";
     case ESPOS_SK_TLS_R_NO_IDENTITY: return "the server certificate carries no host name to check";
+    case ESPOS_SK_TLS_R_CHAIN_FORGED: return "the server certificate is not signed by the pinned CA";
     }
     return "certificate rejected";
 }

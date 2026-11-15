@@ -629,7 +629,9 @@ mode.**
     anybody pressing anything, which is what lets a 90-day certificate work
     on a device in a locker. The names matter as well as the CA: otherwise a
     private CA that signed one host would vouch for every other name it ever
-    signs.
+    signs. Every link of the verified chain must carry a valid signature, so
+    a server cannot hang a copy of the CA's public certificate over a leaf
+    it made itself; such a chain is refused as "not signed by the pinned CA".
   * **A leaf record**: the SHA-256 of the server's certificate itself, used
     when the chain has no CA or the certificate lists no names.
     signalk-server's own self-signed certificate ends up here, and a renewal
