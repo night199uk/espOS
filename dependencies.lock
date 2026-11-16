@@ -20,7 +20,7 @@ dependencies:
       type: service
     version: 0.8.0
   espressif/esp-dl:
-    component_hash: bec531351a359de9f49f7bad90038e5328a24d004da56d0a27731f9448ce7af8
+    component_hash: 3148b2692a2943d7e35401dc10a181b6ba83515ec70ef51499ac5d2593eef3e2
     dependencies:
     - name: espressif/dl_fft
       registry_url: https://components.espressif.com
@@ -46,9 +46,9 @@ dependencies:
     - esp32s2
     - esp32s3
     - esp32s31
-    version: 3.3.15
+    version: 3.3.13
   espressif/esp-sr:
-    component_hash: 7ba1e97d446440faa96a7d98fbda7dbaaf7ae6b960e06cc68264d38aa6eb4d14
+    component_hash: 31c301aa50346158c85271b149a6c7473dfdf3edaa0958968f9cdfe06d4dcd45
     dependencies:
     - name: espressif/cjson
       registry_url: https://components.espressif.com
@@ -61,7 +61,7 @@ dependencies:
     - name: espressif/esp-dl
       registry_url: https://components.espressif.com
       require: private
-      version: ~3.3.12
+      version: 3.3.13
     - name: espressif/esp-dsp
       registry_url: https://components.espressif.com
       require: private
@@ -74,7 +74,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 2.6.1
+    version: 2.6.2
   espressif/esp_new_jpeg:
     component_hash: e1e7e6991193c41ed6c9fc386702aa7821433319e7aa9c3147cd3236310cd69c
     dependencies: []
@@ -414,6 +414,6 @@ direct_dependencies:
 - signalk-espos/espos_sk_flow
 - signalk-espos/espos_time
 - signalk-espos/espos_wifi
-manifest_hash: edccb2f31d6321fbb00de4fdef2d58019fb416e1588efbb5309e73b8702a0f25
+manifest_hash: 9a3d215365fc0b6b83fb2f358913d12be2bdb6ae356988c47bb0fa06bd03101b
 target: esp32s3
 version: 3.0.0
