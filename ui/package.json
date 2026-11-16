@@ -19,7 +19,7 @@
     "lint": "eslint --flag unstable_native_nodejs_ts_config ."
   },
   "dependencies": {
-    "preact": "^11.1.1"
+    "preact": "^11.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -28,8 +28,8 @@
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.1",
-    "vite": "^8.3.6",
-    "vite-plugin-checker": "^0.14.5"
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.8",
+    "vite-plugin-checker": "^1.0.0"
   }
 }
