@@ -290,14 +290,20 @@ esp_err_t espos_flow_start(void)
         if (!s.mailbox) return ESP_ERR_NO_MEM;
     }
 
+    /* An espos_flow_adopt_loop() borrow is only valid until the real loop
+     * exists. Revoke it before xTaskCreate() so the adopter cannot emit
+     * alongside the new task between its creation and its first pass; the
+     * flow task claims ownership itself before run_once(). */
+    TaskHandle_t borrowed_owner = s.owner;
+    s.owner = NULL;
+
     s.running = true;
     if (xTaskCreate(flow_task, "espos_flow", CONFIG_ESPOS_FLOW_TASK_STACK, NULL, CONFIG_ESPOS_FLOW_TASK_PRIO,
                     &s.task) != pdPASS) {
         s.running = false;
+        s.owner = borrowed_owner; /* start failed: the borrow is still valid */
         return ESP_ERR_NO_MEM;
     }
-    /* The flow task claims s.owner as its first act; do not overwrite it here
-     * after the task may already have started. */
     return ESP_OK;
 }
 

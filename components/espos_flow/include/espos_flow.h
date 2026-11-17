@@ -241,6 +241,9 @@ esp_err_t espos_flow_adopt_loop(void);
 /** Undo espos_flow_adopt_loop(). Harmless when nothing was adopted. */
 void espos_flow_release_loop(void);
 
+/* espos_flow_start() revokes an outstanding borrow before it creates the loop;
+ * after it returns, only the flow task is the loop. */
+
 /* Reported by the graph when the edge pool (CONFIG_ESPOS_FLOW_MAX_EDGES) runs
  * out. Not an espos_flow_* function because it is the C++ layer that counts
  * edges; declared here so both halves agree on the number. */

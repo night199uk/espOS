@@ -319,8 +319,9 @@ espos_flow_run_until_idle(1000);
 
 `espos_flow_adopt_loop()` is refused once `espos_flow_start()` has created the
 real loop, so it cannot be used to subvert the one-task rule — it only names
-the truth while there is no loop task. The same call drains pending work
-before a deep sleep.
+the truth while there is no loop task. Starting the loop revokes any borrow
+that is still held; after `espos_flow_start()` returns, only the flow task is
+the loop. The same call drains pending work before a deep sleep.
 
 `test/host/espos_flow_test` runs the wheel and the graph on the linux target
 under Unity ([development.md](development.md)).
