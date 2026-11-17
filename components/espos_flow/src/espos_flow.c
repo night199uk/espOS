@@ -241,6 +241,14 @@ static bool run_once(void)
 static void flow_task(void *ignored)
 {
     (void)ignored;
+
+    /* Claim ownership before the first run_once(). xTaskCreate() starts the
+     * new task immediately and it can preempt the caller before the caller's
+     * post-create `s.owner = s.task` line runs. A timer due at t=0 then emits
+     * through PulseCounter/Linear and trips the task assertion even though it
+     * is the flow task. */
+    s.owner = xTaskGetCurrentTaskHandle();
+
     ESP_LOGI(TAG, "flow loop up (stack %d, prio %d, mailbox %d, timers %d)", CONFIG_ESPOS_FLOW_TASK_STACK,
              CONFIG_ESPOS_FLOW_TASK_PRIO, MAILBOX_DEPTH, MAX_TIMERS);
 
@@ -288,7 +296,8 @@ esp_err_t espos_flow_start(void)
         s.running = false;
         return ESP_ERR_NO_MEM;
     }
-    s.owner = s.task;
+    /* The flow task claims s.owner as its first act; do not overwrite it here
+     * after the task may already have started. */
     return ESP_OK;
 }
 
