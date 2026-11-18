@@ -158,8 +158,6 @@ esp_err_t MultiNode::start() {
       return ESP_ERR_INVALID_ARG;
     }
 
-    const uint8_t source = bus_->GetN2kSource(i);
-    addresses_[i].store(source);
     const uint32_t unique =
         (device.unique_number != 0 ? device.unique_number
                                    : detail::unique_number_from_mac(mac) + i) &
@@ -231,6 +229,7 @@ esp_err_t MultiNode::start() {
 bool MultiNode::send(uint8_t device_index, const tN2kMsg& message) {
   if (!started_ || outbox_ == nullptr) return false;
   if (device_index >= device_count_) return false;
+  if (message.PGN == 0) return false;
   if (message.DataLen < 0 || message.DataLen > tN2kMsg::MaxDataLen) {
     return false;
   }
@@ -294,7 +293,19 @@ void MultiNode::run() {
       message.DataLen = outgoing.len;
       std::memcpy(message.Data, outgoing.data, outgoing.len);
 
-      if (!bus_->SendMsg(message, outgoing.device_index)) break;
+      if (!bus_->SendMsg(message, outgoing.device_index)) {
+        const bool no_address =
+            bus_->GetN2kSource(outgoing.device_index) > N2kMaxCanBusAddress &&
+            outgoing.pgn != N2kPGNIsoAddressClaim;
+        if (no_address) {
+          // This device cannot claim an address, so the library will reject
+          // every non-address-claim frame forever. Drop it instead of leaving
+          // it at the head of the FIFO and stalling every other device.
+          xQueueReceive(outbox_, &outgoing, 0);
+          continue;
+        }
+        break;
+      }
       xQueueReceive(outbox_, &outgoing, 0);
     }
 

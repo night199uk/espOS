@@ -237,8 +237,8 @@ multi.send(0, msg);          // device 0 speaks with source 85
 ```
 
 Unlike `Node`, `MultiNode` does not persist addresses or expose the settings
-page; the identities are fixed by the firmware. It also has no listener API
-yet, and the stock NMEA2000 library has no per-device configuration
+page; the identities are fixed by the firmware. It has no listener API,
+and the stock NMEA2000 library has no per-device configuration
 information, so installation descriptions are left at the library default.
 
 ### Node and bridge on one bus
