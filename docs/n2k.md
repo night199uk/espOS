@@ -206,7 +206,10 @@ senders in one enclosure, or a bank of channels with independent identities.
 `espos_n2k::MultiNode` (`espos_n2k/multi_node.h`) is the multi-device
 counterpart of `Node`. It shares one receiver, transmitter and task, but
 claims a NAME, product information and PGN lists for each `DeviceConfig`.
-Device `i` uses `preferred_address + i`.
+Device `i` first claims `preferred_address + i`. A device with a
+higher-priority NAME can win that address; the library then moves the
+device to a free one, so the addresses need not stay consecutive.
+`address(i)` returns the source a device holds now.
 
 ```cpp
 #include "espos_n2k/multi_node.h"
@@ -233,7 +236,7 @@ ESP_ERROR_CHECK(multi.start());
 tN2kMsg msg;
 SetN2kFluidLevel(msg, /*instance=*/0, N2kft_BlackWater,
                  /*level percent=*/50.0, /*capacity litres=*/80.0);
-multi.send(0, msg);          // device 0 speaks with source 85
+multi.send(0, msg);          // device 0, source 85 unless it lost it (address(0))
 ```
 
 Unlike `Node`, `MultiNode` does not persist addresses or expose the settings
