@@ -209,7 +209,9 @@ claims a NAME, product information and PGN lists for each `DeviceConfig`.
 Device `i` first claims `preferred_address + i`. A device with a
 higher-priority NAME can win that address; the library then moves the
 device to a free one, so the addresses need not stay consecutive.
-`address(i)` returns the source a device holds now.
+`address(i)` returns the source a device uses now. While a contest is
+still open that can be a candidate the claim has not settled yet, and it
+is 254 while the device has no address.
 
 ```cpp
 #include "espos_n2k/multi_node.h"
